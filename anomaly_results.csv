@@ -1,0 +1,6 @@
+config,k,tune_f1,test_precision,test_recall,test_f1,test_event_recall,flagged,tp,fp,fn
+building z-score,2.5,0.2882,0.2703,0.2097,0.2362,0.2416,1195,323,872,1217
+hourly z-score,3,0.3633,0.3487,0.226,0.2742,0.239,998,348,650,1192
+stuck-value rule only (==1.0),,0.6262,1.0,0.2994,0.4608,0.0961,461,461,0,1079
+building z-score + stuck-value,5,0.6409,0.9225,0.3091,0.463,0.1273,516,476,40,1064
+hourly z-score + stuck-value,5,0.6425,0.9271,0.3136,0.4687,0.1351,521,483,38,1057
