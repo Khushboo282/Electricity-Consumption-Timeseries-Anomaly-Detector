@@ -20,6 +20,7 @@ Course project for DS603, Data Structure Algorithms in Python.
 
 | | |
 |---|---|
+| Source | [Kaggle: Energy Anomaly Detection](https://www.kaggle.com/competitions/energy-anomaly-detection/data) |
 | Readings | 262,719 hourly electricity meter readings (`data/store_data.csv`) |
 | Buildings | 192 |
 | Period | 12 blocks of about 5 days each (one per month of 2016) |
