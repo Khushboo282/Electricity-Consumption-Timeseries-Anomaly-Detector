@@ -7,7 +7,7 @@ Run:   streamlit run app.py
 WHAT THE APP SHOWS
   Tab 1  Explore & detect : pick a building and a time window; the skip list
                             answers the range query, the detector flags
-                            spikes / drops / stuck values / gap edges on the chart.
+                            spikes / drops / stuck values on the chart.
   Tab 2  Skip list vs brute force : the SAME query run on our skip list and on
                             the teammate's linear-scan list, timed side by side,
                             with a check that both return identical rows.
@@ -67,12 +67,10 @@ def load_truth(csv_path: str):
 
 
 @st.cache_data(show_spinner="Scoring all buildings (a few seconds)...")
-def evaluate_all(store_csv, truth_csv, method, k, sentinel, max_gap, neighbours):
+def evaluate_all(store_csv, truth_csv, method, k, sentinel):
     store, truth = load_store(store_csv), load_truth(truth_csv)
     predicted = AnomalyDetector(store, method=method, k=k,
-                                sentinel_value=sentinel,
-                                max_gap_hours=max_gap,
-                                neighbour_hours=neighbours).flagged_keys()
+                                sentinel_value=sentinel).flagged_keys()
     s = score(predicted, truth)
     return {"tp": s.tp, "fp": s.fp, "fn": s.fn, "precision": s.precision,
             "recall": s.recall, "f1": s.f1, "flagged": s.flagged,
@@ -145,25 +143,11 @@ with st.sidebar:
     use_sentinel = st.checkbox("Also flag readings equal to 1.0", value=True,
                                help="Dataset-specific rule: 1.0 behaves like a "
                                     "placeholder value in this data (not statistics).")
-    use_gap = st.checkbox("Also flag readings next to a short data gap", value=True,
-                          help="Dataset-specific rule: readings on either side of a "
-                               "2-6 hour hole in the data are usually unreliable.")
-    high_recall = st.checkbox("High-recall mode (also flag the hour before/after)",
-                              value=True,
-                              help="Also flags readings within 1 hour of a flagged "
-                                   "reading. Finds more real anomalies (recall about "
-                                   "0.58 instead of 0.51) but raises more false alarms "
-                                   "(precision about 0.61 instead of 0.81). On by "
-                                   "default: for electricity readings a missed fault "
-                                   "usually costs more than checking a false alarm.")
     show_truth = st.checkbox("Show ground-truth anomalies (diamonds)", value=has_truth,
                              disabled=not has_truth)
 
 sentinel = 1.0 if use_sentinel else None
-max_gap = 6 if use_gap else None
-neighbours = 1 if high_recall else 0
-detector = AnomalyDetector(store, method=method, k=k, sentinel_value=sentinel,
-                           max_gap_hours=max_gap, neighbour_hours=neighbours)
+detector = AnomalyDetector(store, method=method, k=k, sentinel_value=sentinel)
 start_epoch, end_epoch = to_epoch(window[0]), to_epoch(window[1])
 
 # The core operation: ONE skip-list range query for the window
@@ -275,7 +259,7 @@ with tab_accuracy:
 
         st.markdown("**All 192 buildings, current settings**")
         if st.checkbox("Score every building with these settings"):
-            r = evaluate_all(store_csv, truth_csv, method, k, sentinel, max_gap, neighbours)
+            r = evaluate_all(store_csv, truth_csv, method, k, sentinel)
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Precision", f"{r['precision']:.3f}")
             m2.metric("Recall", f"{r['recall']:.3f}")
@@ -294,10 +278,9 @@ with tab_accuracy:
                                              "test_f1", "test_event_recall"]]
             held.columns = ["Configuration", "k", "Precision", "Recall", "F1", "Runs caught"]
             st.dataframe(held, hide_index=True, **_STRETCH_TABLE)
-            st.caption("These values come from one building split (seed 42). Over 10 "
-                       "random splits, F1 for stuck-value + gap-edge averaged 0.63 "
-                       "(range 0.56 to 0.71); see anomaly_split_robustness.csv and "
-                       "docs/README_anomaly.md.")
+            st.caption("These F1 values come from one building split and move between "
+                       "about 0.47 and 0.60 for the best configuration across splits; "
+                       "see README_anomaly.md.")
 
 # ====================================================================== #
 # Tab 4: about
@@ -316,20 +299,13 @@ with tab_about:
    a drop.
 4. **Stuck-value rule.** A reading of exactly `1.0` is flagged too. This is specific to
    this dataset, where `1.0` behaves like a placeholder; it is not a statistical method.
-5. **Gap-edge rule.** The readings on both sides of a short hole in the data (2 to 6
-   missing hours) are flagged: readings around a meter outage are usually unreliable.
-   Also dataset-specific, not statistics.
-6. **High-recall mode (on by default).** Also flags the hour before and after every
-   flagged reading: more real anomalies found, but more false alarms. For electricity
-   readings a missed fault (wrong bills, wasted energy, failing equipment) usually costs
-   more than a few minutes spent checking a false alarm. Untick it for the F1-best setting.
 
 **Things to know**
 
 - The data is hourly and comes in 5-day blocks with long gaps in between; the window
   slider therefore works inside one block (or across all of them).
 - Many labelled anomalies look ordinary by value, so value-based statistics cannot
-  find them all. Expect recall around 0.5.
+  find them all. Expect modest recall.
 - The brute-force list filters on the CSV's coarse `ts` column, while the skip list uses
   the exact `timestamp`. With whole-hour windows (what the slider allows) both return
   the same rows.
