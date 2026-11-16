@@ -147,7 +147,8 @@ def band_frame(readings: Sequence[Tuple[object, float]], baseline: Baseline,
     return pd.DataFrame(rows, columns=["time", "lo", "hi"])
 
 
-KIND_COLORS = {"spike": "#d62728", "drop": "#9467bd", "stuck-value": "#ff7f0e"}
+KIND_COLORS = {"spike": "#d62728", "drop": "#9467bd", "stuck-value": "#ff7f0e",
+               "gap-edge": "#2ca02c", "neighbour": "#8c8c8c"}
 
 
 def build_explore_chart(readings, anomalies, baseline, method, k,

@@ -36,6 +36,25 @@ flags them. This is NOT a statistical method; it is a data-specific rule that
 we discovered by inspecting the data, and the report should say so. Set
 ``sentinel_value=None`` to switch it off.
 
+GAP-EDGE RULE (dataset specific!)
+---------------------------------
+The readings are hourly. When a building has a SHORT hole in its data
+(2..``max_gap_hours`` hours between two consecutive readings), the readings
+on both edges of the hole are flagged: around a meter outage the readings
+next to it are usually unreliable. Long holes (weeks) are just the breaks
+between the data blocks of this dataset and are not flagged. Like the
+stuck-value rule, this was found by inspecting the data with its labels, so
+it is a data-specific rule, not statistics. Set ``max_gap_hours=None`` to
+switch it off.
+
+HIGH-RECALL MODE (optional)
+---------------------------
+Labelled anomalies come in runs of consecutive hours, but the rules above
+often catch only part of a run. With ``neighbour_hours=N`` (default 0 = off)
+every reading within N hours of a reading flagged by another rule is flagged
+too. This finds more of the real anomalies (higher recall) at the cost of
+more false alarms (lower precision).
+
 THE SKIP LIST'S ROLE
 --------------------
 The detector never touches the raw rows. Every reading it looks at comes from
@@ -48,6 +67,7 @@ The detector never touches the raw rows. Every reading it looks at comes from
 from __future__ import annotations
 
 import math
+from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Set, Tuple
@@ -138,8 +158,10 @@ def signed_z(baseline: Baseline, method: Optional[str], epoch: int,
 class Anomaly:
     """One flagged reading.
 
-    kind: "stuck-value" (hit the sentinel rule), "spike" (z > 0) or "drop" (z < 0).
-    score: the signed z-score (0.0 for a stuck-value flag raised without a z-test).
+    kind: "stuck-value" (hit the sentinel rule), "gap-edge" (next to a short
+        hole in the data), "spike" (z > 0), "drop" (z < 0) or "neighbour"
+        (high-recall mode: close in time to another flagged reading).
+    score: the signed z-score (0.0 when no z-test was run).
     """
     building_id: int
     time: datetime
@@ -151,6 +173,10 @@ class Anomaly:
     def reason(self) -> str:
         if self.kind == "stuck-value":
             return f"reading equals the placeholder value {self.value:g}"
+        if self.kind == "gap-edge":
+            return "reading is next to a short gap (missing hours) in the data"
+        if self.kind == "neighbour":
+            return "reading is right next to another flagged reading (high-recall mode)"
         return f"{self.kind}: {abs(self.score):.1f} standard deviations {'above' if self.score > 0 else 'below'} normal"
 
 
@@ -168,6 +194,11 @@ class AnomalyDetector:
             (default 1.0, dataset-specific); None disables the rule.
         min_hour_count: minimum readings an hour-of-day needs to have its own
             statistics (otherwise the building-level ones are used).
+        max_gap_hours: also flag the readings on both edges of a hole of
+            2..max_gap_hours hours in the data (default 6, dataset-specific);
+            None disables the rule.
+        neighbour_hours: high-recall mode; also flag every reading within this
+            many hours of a reading flagged by another rule (default 0 = off).
 
     Example:
         >>> det = AnomalyDetector(store, method="hourly", k=5.0)      # doctest: +SKIP
@@ -176,17 +207,27 @@ class AnomalyDetector:
 
     def __init__(self, store: TimeSeriesStore, method: Optional[str] = "hourly",
                  k: float = 4.0, sentinel_value: Optional[float] = 1.0,
-                 min_hour_count: int = 10) -> None:
+                 min_hour_count: int = 10,
+                 max_gap_hours: Optional[int] = 6,
+                 neighbour_hours: int = 0) -> None:
         if method not in ("hourly", "building", None):
             raise ValueError("method must be 'hourly', 'building' or None")
         if k <= 0:
             raise ValueError("k must be positive")
+        if max_gap_hours is not None and max_gap_hours < 2:
+            raise ValueError("max_gap_hours must be at least 2 (or None)")
+        if neighbour_hours < 0:
+            raise ValueError("neighbour_hours must be 0 or more")
         self.store = store
         self.method = method
         self.k = k
         self.sentinel_value = sentinel_value
         self.min_hour_count = min_hour_count
+        self.max_gap_hours = max_gap_hours
+        self.neighbour_hours = neighbour_hours
         self._baselines: Dict[int, Baseline] = {}
+        self._epochs: Dict[int, List[int]] = {}   # sorted reading times per building
+        self._primary: Dict[int, List[int]] = {}  # sorted times flagged by a rule
 
     # -- baseline ----------------------------------------------------------
     def history(self, building_id: int) -> Readings:
@@ -204,10 +245,29 @@ class AnomalyDetector:
             if not readings:
                 return None
             self._baselines[building_id] = compute_baseline(readings)
+            self._epochs[building_id] = [epoch for epoch, _ in readings]
         return self._baselines[building_id]
 
+    def next_to_short_gap(self, building_id: int, epoch: int) -> bool:
+        """True if the reading at ``epoch`` borders a hole of 2..max_gap_hours hours.
+
+        The previous / next reading is found by binary search in the building's
+        sorted reading times (cached from the baseline's range query).
+        """
+        if self.max_gap_hours is None:
+            return False
+        if self.baseline(building_id) is None:
+            return False
+        epochs = self._epochs[building_id]
+        lo, hi = 2 * SECONDS_PER_HOUR, self.max_gap_hours * SECONDS_PER_HOUR
+        i = bisect_left(epochs, epoch)
+        if i > 0 and lo <= epoch - epochs[i - 1] <= hi:
+            return True
+        j = i + 1 if i < len(epochs) and epochs[i] == epoch else i
+        return j < len(epochs) and lo <= epochs[j] - epoch <= hi
+
     # -- scoring -----------------------------------------------------------
-    def _judge(self, baseline: Baseline, epoch: int,
+    def _judge(self, building_id: int, baseline: Baseline, epoch: int,
                value: float) -> Optional[Tuple[str, float]]:
         """Return (kind, z) if the reading is anomalous, else None."""
         z = signed_z(baseline, self.method, epoch, value, self.min_hour_count)
@@ -215,6 +275,35 @@ class AnomalyDetector:
             return "stuck-value", z
         if abs(z) > self.k:
             return ("spike" if z > 0 else "drop"), z
+        if self.next_to_short_gap(building_id, epoch):
+            return "gap-edge", z
+        return None
+
+    def _primary_epochs(self, building_id: int, baseline: Baseline) -> List[int]:
+        """Sorted times of the building's readings flagged by a rule (cached).
+
+        Needs the whole history, because a reading just outside the requested
+        window can still make a reading inside it a neighbour.
+        """
+        if building_id not in self._primary:
+            self._primary[building_id] = [
+                epoch for epoch, value in self.history(building_id)
+                if self._judge(building_id, baseline, epoch, value) is not None]
+        return self._primary[building_id]
+
+    def _verdict(self, building_id: int, baseline: Baseline, epoch: int,
+                 value: float) -> Optional[Tuple[str, float]]:
+        """Like :meth:`_judge`, plus the high-recall neighbour rule."""
+        verdict = self._judge(building_id, baseline, epoch, value)
+        if verdict is not None or self.neighbour_hours == 0:
+            return verdict
+        # binary search: is a rule-flagged reading within neighbour_hours?
+        primary = self._primary_epochs(building_id, baseline)
+        reach = self.neighbour_hours * SECONDS_PER_HOUR
+        i = bisect_left(primary, epoch - reach)
+        if i < len(primary) and primary[i] <= epoch + reach:
+            z = signed_z(baseline, self.method, epoch, value, self.min_hour_count)
+            return "neighbour", z
         return None
 
     def detect(self, building_id: int, start, end) -> List[Anomaly]:
@@ -230,7 +319,7 @@ class AnomalyDetector:
         raw = self.store.query_raw(building_id, to_epoch(start), to_epoch(end))
         found = []
         for (_, epoch), value in raw:
-            verdict = self._judge(baseline, epoch, value)
+            verdict = self._verdict(building_id, baseline, epoch, value)
             if verdict is not None:
                 kind, z = verdict
                 found.append(Anomaly(building_id, epoch_to_datetime(epoch),
@@ -255,6 +344,6 @@ class AnomalyDetector:
             if baseline is None:
                 continue
             for epoch, value in self.history(b):
-                if self._judge(baseline, epoch, value) is not None:
+                if self._verdict(b, baseline, epoch, value) is not None:
                     flagged.add((b, epoch))
         return flagged
