@@ -39,6 +39,7 @@ import csv
 import os
 import statistics
 import time
+from typing import NamedTuple
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
 _anomaly = import_module("05_anomaly")
@@ -73,17 +74,27 @@ CONFIGS = [
 ]
 
 
-def precompute(store, truth, building_ids):
-    """One pass: for every reading keep
-    (key, |z_building|, |z_hourly|, is_sentinel, label, gap_hours).
+class Reading(NamedTuple):
+    """Everything the evaluation needs to know about one reading."""
+    key: tuple            # (building_id, epoch)
+    z_building: float     # |z| against the building's overall mean/std
+    z_hourly: float       # |z| against the mean/std of that hour of day
+    is_stuck: bool        # value == 1.0 (the stuck-value rule)
+    gap_hours: float      # size of the nearest short hole (>= 2 h), inf if none
 
-    gap_hours = the smallest hole (in hours, >= 2) between this reading and its
-    previous / next reading, or inf if both neighbours are 1 hour away. The
-    gap-edge rule with max_gap_hours=G flags the reading iff gap_hours <= G.
+
+def precompute(store, building_ids):
+    """Describe every reading ONCE, so trying many settings is fast.
+
+    Trying every k / gap / configuration with the real detector would repeat
+    the same work hundreds of times. Instead we compute each reading's
+    z-scores and gap size once; a configuration then just compares these
+    numbers with its thresholds (see ``predicted_from``). At the end, main()
+    checks that the real AnomalyDetector flags exactly the same readings.
 
     Readings come from skip-list range queries (one whole-history query per
-    building, via the detector), exactly as the real detector would see them.
-    Returns ``{building_id: [row, ...]}``.
+    building), exactly as the real detector sees them.
+    Returns ``{building_id: [Reading, ...]}`` in time order.
     """
     helper = AnomalyDetector(store)          # used only for history()/baseline()
     table = {}
@@ -91,37 +102,49 @@ def precompute(store, truth, building_ids):
         baseline = helper.baseline(b)
         history = helper.history(b)
         epochs = [epoch for epoch, _ in history]
-        rows = []
+        readings = []
         for i, (epoch, value) in enumerate(history):
-            key = (b, epoch)
-            holes = [g for g in ((epoch - epochs[i - 1]) if i > 0 else 0,
-                                 (epochs[i + 1] - epoch) if i + 1 < len(epochs) else 0)
-                     if g >= 2 * HOUR]
-            rows.append((key,
-                         abs(signed_z(baseline, "building", epoch, value)),
-                         abs(signed_z(baseline, "hourly", epoch, value)),
-                         value == SENTINEL,
-                         key in truth,
-                         min(holes) / HOUR if holes else INF))
-        table[b] = rows
+            # distance (in seconds) to the previous and next reading
+            before = epoch - epochs[i - 1] if i > 0 else 0
+            after = epochs[i + 1] - epoch if i + 1 < len(epochs) else 0
+            holes = [g for g in (before, after) if g >= 2 * HOUR]
+            readings.append(Reading(
+                key=(b, epoch),
+                z_building=abs(signed_z(baseline, "building", epoch, value)),
+                z_hourly=abs(signed_z(baseline, "hourly", epoch, value)),
+                is_stuck=(value == SENTINEL),
+                gap_hours=min(holes) / HOUR if holes else INF))
+        table[b] = readings
     return table
+
+
+def is_flagged(r, method, use_sentinel, k, max_gap):
+    """Would a detector with these settings flag reading ``r`` (rules only)?"""
+    if method == "building" and r.z_building > k:
+        return True
+    if method == "hourly" and r.z_hourly > k:
+        return True
+    if use_sentinel and r.is_stuck:
+        return True
+    return max_gap is not None and r.gap_hours <= max_gap
 
 
 def predicted_from(table, building_ids, method, use_sentinel, k,
                    max_gap=None, neighbour_hours=0):
     """Set of flagged keys for one configuration on the given buildings."""
-    column = {"building": 1, "hourly": 2}.get(method)
     flagged = set()
     for b in building_ids:
-        rows = table[b]
-        primary = [row[0][1] for row in rows
-                   if (column is not None and row[column] > k) or (use_sentinel and row[3])
-                   or (max_gap is not None and row[5] <= max_gap)]
+        readings = table[b]
+        primary = [r.key[1] for r in readings
+                   if is_flagged(r, method, use_sentinel, k, max_gap)]
         flagged.update((b, e) for e in primary)
         if neighbour_hours and primary:
-            # two-pointer sweep: readings within neighbour_hours of a primary flag
+            # High-recall mode: also flag readings within neighbour_hours of a
+            # flagged one. Both lists are in time order, so one pointer j walks
+            # through `primary` while we walk through the readings.
             reach, j = neighbour_hours * HOUR, 0
-            for (_, epoch), *_ in rows:
+            for r in readings:
+                epoch = r.key[1]
                 while j < len(primary) and primary[j] < epoch - reach:
                     j += 1
                 if j < len(primary) and primary[j] <= epoch + reach:
@@ -157,7 +180,7 @@ def main(args):
     truth = load_ground_truth(args.truth_csv)
     print(f"Loaded {len(store):,} readings, {len(truth):,} labelled anomalies "
           f"({len(truth) / len(store):.2%}) in {time.perf_counter() - t0:.1f}s")
-    table = precompute(store, truth, store.buildings())
+    table = precompute(store, store.buildings())
 
     # ---- main split ---------------------------------------------------------
     tune_ids, test_ids = split_buildings(store.buildings(), seed=args.seed)

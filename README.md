@@ -1,50 +1,58 @@
 # Electricity Consumption Time-Series Anomaly Detector
 
-A small time-series database written from scratch in Python. It stores hourly electricity
-meter readings, answers "all readings of building X between time A and time B" with a
-**skip list index** instead of scanning every row, and flags unusual spikes and drops with
-**plain statistics (no machine learning)**. An interactive **Streamlit** app ties it together.
+A small time-series database written from scratch in Python. It:
+
+1. **stores** hourly electricity meter readings for 192 buildings,
+2. **answers** "give me all readings of building X between time A and time B" quickly, using a
+   **skip list** we wrote ourselves instead of scanning every row,
+3. **flags unusual readings** (anomalies) with simple statistics, no machine learning,
+4. **shows** all of it in an interactive **Streamlit** app.
 
 Course project for DS603, Data Structure Algorithms in Python.
 
 ## Highlights
 
-- **Skip list built from scratch** (no `bisect`, `sortedcontainers` or tree libraries): insert, search and range query in expected O(log n + k).
-- **Roughly 800 to 2,000 times faster than a linear scan** on 262,719 readings: about 6 to 17 microseconds per query versus 10 to 14 milliseconds (see the benchmark below).
-- **Statistical anomaly detection** per building (mean and standard deviation, optionally per hour of day), built on top of the fast range queries.
-- **Honest evaluation** against labelled ground truth: precision, recall, F1, with the threshold tuned on one half of the buildings and scored on the other half.
-- **Interactive app**: query any building and time window, see flagged anomalies on a chart, and compare skip list and brute force live.
-- **59 automated tests**, including a comparison of every skip list answer with a brute-force scan.
+- **Skip list built from scratch**: insert, search and range query take about log(n) steps.
+- **Hundreds to thousands of times faster than scanning every row**: on all 262,719 readings, a
+  query takes about 6 to 17 microseconds with the skip list and about 11 to 12 milliseconds with
+  a linear scan.
+- **Anomaly detection with plain statistics**: mean, standard deviation and two simple rules.
+- **Honest accuracy numbers**: settings are chosen on half of the buildings and tested on the
+  other half.
+- **61 automated tests**, including checking every skip list answer against a linear scan.
 
 ## Dataset
 
 | | |
 |---|---|
 | Source | [Kaggle: Energy Anomaly Detection](https://www.kaggle.com/competitions/energy-anomaly-detection/data) |
-| Readings | 262,719 hourly electricity meter readings (`data/store_data.csv`) |
+| Readings | 262,719 hourly meter readings, in `data/store_data.csv` |
 | Buildings | 192 |
-| Period | 12 blocks of about 5 days each (one per month of 2016) |
-| Labels | `data/ground_truth.csv`: 3,144 readings (1.2 %) labelled anomalous |
+| Time period | 12 blocks of about 5 days, one per month of 2016 |
+| Labels | `data/ground_truth.csv` marks 3,144 readings (1.2 %) as anomalies |
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    CSV["store_data.csv"] --> DP["Data processing<br/>keys = (building, time)"]
+    CSV["store_data.csv"] --> DP["Load data<br/>key = (building, time)"]
     DP --> SL["Skip list index"]
-    DP --> BF["Brute force<br/>linear scan"]
+    DP --> BF["Brute force<br/>(check every row)"]
     SL --> AD["Anomaly detector"]
-    GT["ground_truth.csv"] --> EV["Evaluation<br/>precision / recall / F1"]
+    GT["ground_truth.csv"] --> EV["Accuracy<br/>precision / recall / F1"]
     AD --> EV
     SL --> UI["Streamlit app"]
     BF --> UI
     AD --> UI
 ```
 
-**1. Index.** Every reading is stored in a skip list under the key `(building_id, time)`, so one
-building's readings sit together in time order. A skip list is a sorted linked list with random
-"express lanes": a search moves right along the top lane while the next key is still too small,
-then drops down a level, and repeats.
+**1. Store.** Each reading is saved in the skip list under the key `(building_id, time)`.
+Python sorts tuples by the first item, then the second, so all readings of one building end up
+next to each other, in time order.
+
+**2. Query.** A skip list is a sorted linked list with extra "express lanes" on top. To find
+building B from time t1 to t2, it uses the express lanes to jump to `(B, t1)` in about log(n)
+steps, then walks forward until it passes `(B, t2)`.
 
 ```
 Level 3:  HEAD ---------------------------> 40 ------------------> None
@@ -52,109 +60,90 @@ Level 2:  HEAD ---------> 10 -------------> 40 ------> 70 -------> None
 Level 1:  HEAD --> 5 ---> 10 --> 25 ------> 40 --> 55 --> 70 --> 90 -> None
 ```
 
-**2. Range query.** "Building B between t1 and t2" finds the first key at or after `(B, t1)` in
-about log n steps, then walks forward until it passes `(B, t2)`. Example: building 107 over 24 hours
-returns 24 readings after 47 key comparisons, while the brute force reads all 262,719 rows.
+Example: building 107 over 24 hours gives 24 readings after only 47 comparisons. The brute force
+has to look at all 262,719 rows to find the same 24.
 
-**3. Anomaly detection.** Fetch a building's history with one range query, compute its mean and
-standard deviation, and flag any reading whose z-score `(value - mean) / std` exceeds a threshold `k`
-(spike if above, drop if below). The baseline can be per building or per hour of day, because
-electricity use follows a daily cycle. A separate, dataset-specific rule also flags readings of exactly
-`1.0`, which behave like a placeholder value in this data, and a second one flags the readings on
-either side of a short hole (2 to 6 missing hours) in a building's data, found by binary search in
-the building's sorted timestamps.
+**3. Detect anomalies.** For each building we compute what is "normal": the average (mean) and
+the typical spread (standard deviation), optionally separately for each hour of the day. Then:
+
+- **Spike / drop:** the reading is more than `k` standard deviations above / below normal.
+- **Stuck value:** the reading is exactly `1.0`, which acts as a "meter broken" placeholder in
+  this dataset.
+- **Gap edge:** the reading sits right next to a short hole (2 to 6 missing hours) in the data.
 
 ## Results
 
 ### Query speed
 
-Skip list versus linear scan, same queries, same rows, pure Python, best of several runs:
+Same queries, same data, both in pure Python:
 
 ![Benchmark: skip list vs linear scan](benchmark_plot.png)
 
-The linear scan grows with the number of stored readings; the skip list stays almost flat.
-Exact numbers are in `benchmark_results.csv`. Every skip list answer is checked against the brute
-force before it is timed.
+The linear scan gets slower as more readings are stored; the skip list stays almost flat.
+Exact numbers: `benchmark_results.csv`.
 
 ### Anomaly detection accuracy
 
-Threshold `k` and gap limit chosen on 96 buildings, scored on the 96 held-out buildings:
+We repeated "choose settings on half the buildings, test on the other half" for 10 random
+splits. Average test scores, with the lowest and highest in brackets:
 
-| Method | k | Gap (h) | Precision | Recall | F1 | Event recall |
-|---|---|---|---|---|---|---|
-| building z-score | 2.5 | - | 0.270 | 0.210 | 0.236 | 0.242 |
-| hourly z-score | 3 | - | 0.349 | 0.226 | 0.274 | 0.239 |
-| stuck-value rule only (reading = 1.0) | - | - | 1.000 | 0.299 | 0.461 | 0.096 |
-| building z-score + stuck-value rule | 5 | - | 0.922 | 0.309 | 0.463 | 0.127 |
-| hourly z-score + stuck-value rule | 5 | - | 0.927 | 0.314 | 0.469 | 0.135 |
-| **stuck-value + gap-edge rules** | - | 6 | **0.896** | **0.437** | **0.588** | **0.616** |
-| hourly z-score + stuck-value + gap-edge | 5 | 6 | 0.855 | 0.445 | 0.585 | 0.629 |
-| high-recall mode (rules + 1 h neighbours) | - | 6 | 0.702 | 0.498 | 0.583 | 0.616 |
+| Method | Precision | Recall | F1 |
+|---|---|---|---|
+| hourly z-score only | 0.32 [0.21-0.48] | 0.30 [0.22-0.37] | 0.30 [0.24-0.36] |
+| stuck-value rule only | 1.00 [1.00-1.00] | 0.36 [0.28-0.42] | 0.53 [0.43-0.59] |
+| **stuck-value + gap-edge rules (best F1)** | **0.81 [0.68-0.91]** | **0.52 [0.41-0.58]** | **0.63 [0.56-0.71]** |
+| high-recall mode (app default) | 0.62 [0.48-0.72] | 0.58 [0.47-0.65] | 0.59 [0.54-0.68] |
 
-The gap-edge rule raised recall from 0.31 to 0.44 and event recall (anomaly runs with at least one
-flag) from 0.14 to 0.62, at a small cost in precision. Adding the z-score on top of the two rules
-barely changes F1. High-recall mode (`neighbour_hours=1`) also flags the hour before and after
-every flagged reading: it finds more real anomalies but raises more false alarms. **The app uses it
-by default**, because for electricity readings a missed fault (wrong bills, wasted energy, failing
-equipment) usually costs more than a few minutes spent checking a false alarm.
+- **Precision**: of the readings we flagged, how many were real anomalies.
+- **Recall**: of the real anomalies, how many we found.
+- **F1**: one number combining both.
 
-**Robustness.** One split can be lucky or unlucky, so the whole protocol (tune on one half, test on
-the other) is repeated over 10 random splits of the buildings. Test scores, mean [min - max]:
+We don't report plain accuracy: only 1.2 % of readings are anomalies, so a detector that never
+flags anything would already be 98.8 % "accurate".
 
-| Method | Precision | Recall | F1 | Event recall |
-|---|---|---|---|---|
-| hourly z-score | 0.32 [0.21-0.48] | 0.30 [0.22-0.37] | 0.30 [0.24-0.36] | 0.28 [0.22-0.33] |
-| stuck-value rule only | 1.00 [1.00-1.00] | 0.36 [0.28-0.42] | 0.53 [0.43-0.59] | 0.12 [0.09-0.15] |
-| hourly z-score + stuck-value | 0.90 [0.80-0.95] | 0.39 [0.31-0.46] | 0.54 [0.46-0.60] | 0.18 [0.15-0.24] |
-| **stuck-value + gap-edge** | **0.81 [0.68-0.91]** | **0.52 [0.41-0.58]** | **0.63 [0.56-0.71]** | **0.66 [0.61-0.72]** |
-| high-recall mode | 0.62 [0.48-0.72] | 0.58 [0.47-0.65] | 0.59 [0.54-0.68] | 0.66 [0.61-0.72] |
-
-`python 07_run_anomaly_eval.py` prints this table for every configuration. The split used for the first table
-(seed 42) is one of the less favourable ones for the gap-edge rules. Plain accuracy is not reported
-because only 1.2 % of readings are anomalies, so a detector that flags nothing would already score
-98.8 %.
+**High-recall mode** also flags the hour before and after each flagged reading. It finds more
+real anomalies but raises more false alarms. The app uses it by default, because for electricity
+meters a missed fault (wrong bills, wasted energy) usually costs more than checking a false
+alarm. Full tables and explanation: [docs/README_anomaly.md](docs/README_anomaly.md).
 
 ## Getting started
 
 Requires Python 3.9 or newer (tested on 3.12 and 3.13).
 
 ```bash
-git clone https://github.com/<your-username>/Electricity-Consumption-Timeseries-Anomaly-Detector.git
+git clone https://github.com/Khushboo282/Electricity-Consumption-Timeseries-Anomaly-Detector.git
 cd Electricity-Consumption-Timeseries-Anomaly-Detector
 pip install -r requirements.txt
 ```
 
-Make sure the two data files are in the `data/` folder:
+The two data files must be in the `data/` folder (`data/store_data.csv`, `data/ground_truth.csv`).
 
-```
-data/store_data.csv
-data/ground_truth.csv
-```
-
-Then run the parts in this order (the file names are numbered the same way):
+Then run the steps in the order of the file numbers:
 
 ```bash
-python -m pytest 03_test_skiplist.py   # 3. test the skip list, store and brute force
-python 04_benchmark.py                 # 4. skip list vs brute force timing
-python -m pytest 06_test_anomaly.py    # 6. test the anomaly detector and metrics
-python 07_run_anomaly_eval.py          # 7. anomaly detection accuracy
-streamlit run 09_app.py                # 9. the interactive app
-python -m pytest 09_test_ui.py         # 9. test the app and its helpers
+python -m pytest                   # run all 61 tests (about 30 s)
+python 04_benchmark.py             # skip list vs brute force timing
+python 07_run_anomaly_eval.py      # anomaly detection accuracy (about 1 min)
+streamlit run 09_app.py            # the interactive app (opens in your browser)
 ```
 
-`python -m pytest` runs all three test files at once. Files 01-03, 05-06 and 08 are
-modules used by the others; they are not run on their own. Because the file names
-start with a digit, Python code loads them with
-`importlib.import_module("02_timeseries_store")` instead of a plain `import`.
+### Why the file names start with numbers
 
-### Using the store from Python
+The numbers show the order the project is built in. Python's normal `import` can't load a name
+that starts with a digit, so the files load each other like this:
 
 ```python
-from importlib import import_module   # file names start with a digit
+from importlib import import_module
 _timeseries_store = import_module("02_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
-_anomaly = import_module("05_anomaly")
-AnomalyDetector = _anomaly.AnomalyDetector
+```
+
+### Using it from Python
+
+```python
+from importlib import import_module
+TimeSeriesStore = import_module("02_timeseries_store").TimeSeriesStore
+AnomalyDetector = import_module("05_anomaly").AnomalyDetector
 
 store = TimeSeriesStore.from_csv("data/store_data.csv", seed=42)
 
@@ -171,74 +160,61 @@ for a in detector.detect(159, "2016-08-01", "2016-08-05 23:00"):
 
 `streamlit run 09_app.py` opens four tabs:
 
-1. **Explore & detect**: readings, the normal band, and flagged spikes, drops and stuck values, with the ground-truth anomalies available as an overlay.
-2. **Skip list vs brute force**: the same query on both methods, with time, work done and a check that the results are identical.
-3. **Accuracy**: correct flags, false alarms and misses for the current window, plus precision, recall and F1 across all buildings.
-4. **About**: a short explanation of the method.
+1. **Explore & detect**: a chart of the readings with flagged anomalies marked.
+2. **Skip list vs brute force**: the same query on both, timed side by side.
+3. **Accuracy**: precision, recall and F1 against the labels.
+4. **About**: a short explanation.
 
-Tip: with the default threshold the detector flags few spikes and drops. Set `k = 3` and try
-buildings 159 (August block), 183 or 890 to see them.
-
-<!-- Add screenshots here once you have them, for example:
-![App screenshot](docs/images/app.png) -->
+Tip: to see red spikes and purple drops, set `k = 3` and pick building 159 (August block), 183
+or 890. Details: [docs/README_ui.md](docs/README_ui.md).
 
 ## Project structure
 
 ```
 .
-├── README.md
-├── requirements.txt
-├── data/
-│   ├── store_data.csv
-│   └── ground_truth.csv
-├── docs/
-│   ├── README_team.md       detailed guide to every part
-│   ├── README_data_structure.md  the skip list
-│   ├── README_anomaly.md    anomaly detection and its evaluation
-│   └── README_ui.md         the Streamlit app
+├── README.md                this file
+├── requirements.txt         Python packages to install
 ├── pytest.ini               lets pytest find the numbered test files
-├── 01_skiplist.py           the skip list index
-├── 02_timeseries_store.py   data loading, keys and the query layer
-├── 03_brute_force.py        linear-scan baseline and correctness oracle
-├── 03_test_skiplist.py      TEST: skip list, store and brute force
-├── 04_benchmark.py          RUN: skip list vs brute force timing
-├── 05_anomaly.py            statistical anomaly detector
-├── 06_evaluation.py         ground-truth loading and accuracy metrics
+├── data/                    store_data.csv, ground_truth.csv
+├── docs/                    detailed guides (see below)
+│
+├── 01_skiplist.py           the skip list
+├── 02_timeseries_store.py   loads the CSV, builds keys, answers queries
+├── 03_brute_force.py        linear scan (for speed comparison and checking answers)
+├── 03_test_skiplist.py      TEST: skip list, store, brute force
+├── 04_benchmark.py          RUN:  skip list vs brute force timing
+├── 05_anomaly.py            the anomaly detector
+├── 06_evaluation.py         precision / recall / F1
 ├── 06_test_anomaly.py       TEST: anomaly detector and metrics
-├── 07_run_anomaly_eval.py   RUN: full accuracy evaluation
+├── 07_run_anomaly_eval.py   RUN:  full accuracy evaluation
 ├── 08_ui_helpers.py         helper functions for the app
-├── 09_app.py                RUN: Streamlit app
-├── 09_test_ui.py            TEST: app and helpers
-├── benchmark_results.csv    generated by 04_benchmark.py
-├── benchmark_plot.png       generated by 04_benchmark.py
-├── anomaly_results.csv      generated by 07_run_anomaly_eval.py
-└── anomaly_tuning_sweep.csv generated by 07_run_anomaly_eval.py
+├── 09_app.py                RUN:  the Streamlit app
+├── 09_test_ui.py            TEST: the app and its helpers
+│
+├── benchmark_results.csv    output of 04_benchmark.py
+├── benchmark_plot.png       output of 04_benchmark.py
+├── anomaly_results.csv      output of 07_run_anomaly_eval.py
+└── anomaly_tuning_sweep.csv output of 07_run_anomaly_eval.py
 ```
-
-## Testing
-
-```bash
-python -m pytest
-```
-
-The 61 tests cover the skip list (unit, edge cases, randomised comparison against a reference),
-the store and brute force (every answer compared on real data, including ranges inside the data gaps),
-the anomaly detector (planted spikes and drops with known positions, plus hand-computed metrics),
-and the app (a headless run that clicks through the controls). Tests that need the CSV files are
-skipped if `data/` is missing.
-
-## Limitations
-
-- Everything is in memory and in pure Python; there is no persistence to disk and no `delete` operation.
-- A NumPy-based scan would be faster than our pure-Python brute force, so the speed-up figures compare against a plain Python scan.
-- About 62 % of the labelled anomalies are not at the `1.0` value, and many of them look normal by value (about 94 % of the still-missed ones are within 3 standard deviations of normal). Statistics on values alone cannot separate them from normal readings, which caps recall at about 0.45.
-- The `1.0` rule and the gap-edge rule are specific to this dataset and were found by inspecting the data with its labels, so they are not blind results.
-- The baseline uses a building's whole history, which suits offline analysis but not live streaming.
 
 ## Documentation
 
-See [`docs/README_team.md`](docs/README_team.md) for a walkthrough of each part (data processing,
-brute force, skip list, anomaly detection, UI) with worked examples.
+| Guide | Read it for |
+|---|---|
+| [docs/README_team.md](docs/README_team.md) | start here: the whole project, part by part, in plain words |
+| [docs/README_data_structure.md](docs/README_data_structure.md) | the skip list and the speed benchmark |
+| [docs/README_anomaly.md](docs/README_anomaly.md) | anomaly detection and all accuracy results |
+| [docs/README_ui.md](docs/README_ui.md) | the Streamlit app |
+
+## Limitations
+
+- Everything lives in memory; nothing is saved to disk, and readings can't be deleted.
+- A NumPy-based scan would be much faster than our pure-Python one. Our speed-up is measured
+  against a plain Python scan.
+- The `1.0` rule and the gap-edge rule only fit this dataset. We found them by looking at the
+  data together with its labels.
+- Many labelled anomalies look completely normal by value, so no value-based method can find
+  them all. Recall stays around 0.5 to 0.6.
 
 ## Team
 

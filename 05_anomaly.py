@@ -132,24 +132,35 @@ def compute_baseline(readings: Readings) -> Baseline:
     return Baseline(mean=mean, std=std, n=len(values), hourly=hourly)
 
 
+def normal_stats(baseline: Baseline, method: str, epoch: int,
+                 min_hour_count: int = 10) -> Tuple[float, float]:
+    """The (mean, std) a reading at ``epoch`` is compared against.
+
+    "building": the building's overall mean/std.
+    "hourly":   the mean/std of that hour of day, but only if the hour has at
+                least ``min_hour_count`` readings and some spread; otherwise
+                fall back to the building's overall mean/std.
+    """
+    if method == "hourly":
+        h_mean, h_std, h_n = baseline.hourly.get(hour_of_day(epoch), (0.0, 0.0, 0))
+        if h_n >= min_hour_count and h_std > 0:
+            return h_mean, h_std
+    elif method != "building":
+        raise ValueError(f"unknown method {method!r}; use 'building', 'hourly' or None")
+    return baseline.mean, baseline.std
+
+
 def signed_z(baseline: Baseline, method: Optional[str], epoch: int,
              value: float, min_hour_count: int = 10) -> float:
     """Signed z-score of one reading (positive = above normal, negative = below).
 
+    z = (value - mean) / std, using the mean/std from :func:`normal_stats`.
     Returns 0.0 when no judgement is possible (``method`` is None, or the
-    relevant standard deviation is zero, i.e. the building never varies).
-    For ``method="hourly"``, an hour with fewer than ``min_hour_count``
-    readings (or zero spread) falls back to the building-level statistics.
+    standard deviation is zero, i.e. the building never varies).
     """
     if method is None:
         return 0.0
-    mean, std = baseline.mean, baseline.std
-    if method == "hourly":
-        h_mean, h_std, h_n = baseline.hourly.get(hour_of_day(epoch), (0.0, 0.0, 0))
-        if h_n >= min_hour_count and h_std > 0:
-            mean, std = h_mean, h_std
-    elif method != "building":
-        raise ValueError(f"unknown method {method!r}; use 'building', 'hourly' or None")
+    mean, std = normal_stats(baseline, method, epoch, min_hour_count)
     if std == 0:
         return 0.0
     return (value - mean) / std

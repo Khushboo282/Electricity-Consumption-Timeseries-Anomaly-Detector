@@ -27,7 +27,7 @@ import pandas as pd
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
 _anomaly = import_module("05_anomaly")
 Baseline = _anomaly.Baseline
-hour_of_day = _anomaly.hour_of_day
+normal_stats = _anomaly.normal_stats
 _timeseries_store = import_module("02_timeseries_store")
 to_epoch = _timeseries_store.to_epoch
 
@@ -39,19 +39,12 @@ SECONDS_PER_HOUR = 3600
 # Locating the data files
 # ---------------------------------------------------------------------- #
 def candidate_dirs(extra: Iterable[str] = ()) -> List[str]:
-    """Folders searched for the data files, most specific first."""
-    dirs = [*extra,
-            os.path.join(HERE, "data"), HERE,
-            os.path.join(HERE, "processed data"),
-            os.path.join(os.getcwd(), "data"), os.getcwd(),
-            os.path.join(os.path.dirname(HERE), "data")]
-    seen, ordered = set(), []
-    for d in dirs:
-        d = os.path.abspath(d)
-        if d not in seen:
-            seen.add(d)
-            ordered.append(d)
-    return ordered
+    """Folders searched for the data files: any extra folders, then data/
+    next to the code, the code folder itself, and the same two relative to
+    the folder the command was started from."""
+    dirs = [*extra, os.path.join(HERE, "data"), HERE,
+            os.path.join(os.getcwd(), "data"), os.getcwd()]
+    return list(dict.fromkeys(os.path.abspath(d) for d in dirs))   # drop duplicates, keep order
 
 
 def find_data_file(filename: str, env_var: Optional[str] = None,
@@ -119,11 +112,7 @@ def normal_range(baseline: Baseline, method: Optional[str], epoch: int, k: float
     """
     if method is None:
         return None
-    mean, std = baseline.mean, baseline.std
-    if method == "hourly":
-        h_mean, h_std, h_n = baseline.hourly.get(hour_of_day(epoch), (0.0, 0.0, 0))
-        if h_n >= min_hour_count and h_std > 0:
-            mean, std = h_mean, h_std
+    mean, std = normal_stats(baseline, method, epoch, min_hour_count)
     if std == 0:
         return None
     return mean - k * std, mean + k * std
