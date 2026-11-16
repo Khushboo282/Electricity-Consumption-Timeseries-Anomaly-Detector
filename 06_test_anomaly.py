@@ -133,6 +133,48 @@ def test_stuck_value_rule_takes_priority_and_can_be_disabled():
     assert off.detect_history(7) == []
 
 
+def test_gap_edge_rule_flags_both_sides_of_short_gaps_only():
+    """Readings next to a 2..max_gap_hours hole are flagged; long holes are not."""
+    hours = list(range(0, 20)) + list(range(25, 45)) + list(range(45 + 500, 45 + 520))
+    rows = [(8, START + h * HOUR, 100.0 + (h % 5)) for h in hours]
+    store = TimeSeriesStore.from_rows(rows, seed=0)
+    on = AnomalyDetector(store, method=None, sentinel_value=None, max_gap_hours=12)
+    flagged = on.detect_history(8)
+    # hole of 6 h between hour 19 and hour 25 -> both edges; the 500 h hole is ignored
+    expected = [datetime(2016, 1, 1) + timedelta(hours=h) for h in (19, 25)]
+    assert [a.time for a in flagged] == expected
+    assert all(a.kind == "gap-edge" and "gap" in a.reason for a in flagged)
+    # a window that holds only one edge still sees the hole (neighbour outside window)
+    assert [a.time for a in on.detect(8, expected[1], expected[1])] == [expected[1]]
+    off = AnomalyDetector(store, method=None, sentinel_value=None, max_gap_hours=None)
+    assert off.detect_history(8) == []
+    narrow = AnomalyDetector(store, method=None, sentinel_value=None, max_gap_hours=5)
+    assert narrow.detect_history(8) == []          # the 6 h hole is longer than 5 h
+
+
+def test_high_recall_mode_flags_neighbours_of_flagged_readings():
+    """neighbour_hours=N adds readings within N hours of a rule-flagged reading."""
+    rows = [(9, START + h * HOUR, 100.0 + (h % 5)) for h in range(48)]
+    rows[20] = (9, rows[20][1], 1.0)                     # stuck value at hour 20
+    store = TimeSeriesStore.from_rows(rows, seed=0)
+    hours = lambda det: [int((a.time - datetime(2016, 1, 1)).total_seconds()) // HOUR
+                         for a in det.detect_history(9)]
+    plain = AnomalyDetector(store, method=None, sentinel_value=1.0)
+    one = AnomalyDetector(store, method=None, sentinel_value=1.0, neighbour_hours=1)
+    two = AnomalyDetector(store, method=None, sentinel_value=1.0, neighbour_hours=2)
+    assert hours(plain) == [20]
+    assert hours(one) == [19, 20, 21]
+    assert hours(two) == [18, 19, 20, 21, 22]
+    kinds = {a.kind for a in one.detect_history(9)}
+    assert kinds == {"stuck-value", "neighbour"}
+    # a window holding only a neighbour still sees the flag just outside it
+    assert [a.kind for a in one.detect(9, "2016-01-01 21:00", "2016-01-01 23:00")] == ["neighbour"]
+    # flagged_keys agrees with detect_history, and high recall is a superset
+    assert len(one.flagged_keys([9])) == 3 and plain.flagged_keys([9]) <= one.flagged_keys([9])
+    with pytest.raises(ValueError):
+        AnomalyDetector(store, neighbour_hours=-1)
+
+
 def test_detect_window_equals_filtered_history(synthetic):
     store, _ = synthetic
     det = AnomalyDetector(store, method="hourly", k=4.0, sentinel_value=None)
@@ -167,6 +209,8 @@ def test_invalid_parameters(synthetic):
         AnomalyDetector(store, method="bogus")
     with pytest.raises(ValueError):
         AnomalyDetector(store, k=0)
+    with pytest.raises(ValueError):
+        AnomalyDetector(store, max_gap_hours=1)
     with pytest.raises(ValueError):
         signed_z(compute_baseline([(START, 1.0)]), "bogus", START, 1.0)
 
@@ -295,7 +339,7 @@ def test_real_labels_line_up_with_readings(real):
 
 def test_real_stuck_value_rule_is_precise(real):
     store, truth = real
-    det = AnomalyDetector(store, method=None, sentinel_value=1.0)
+    det = AnomalyDetector(store, method=None, sentinel_value=1.0, max_gap_hours=None)
     s = score(det.flagged_keys(), truth)
     assert s.precision > 0.95            # almost every reading == 1.0 is labelled
     assert s.flagged == 1195             # the number of readings equal to 1.0

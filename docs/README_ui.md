@@ -9,7 +9,7 @@ scan, and check accuracy against the ground truth.
 ```
 project folder/
   09_app.py  08_ui_helpers.py  01_skiplist.py  02_timeseries_store.py  05_anomaly.py  06_evaluation.py
-  brute_force_demo.py        <- the teammate's brute force (used unmodified)
+  03_brute_force.py             <- the linear-scan brute force
   data/
     store_data.csv
     ground_truth.csv
@@ -34,13 +34,21 @@ the accuracy views are disabled. First start takes a few seconds to build the in
 * **Method**: hourly baseline, building baseline, or the stuck-value rule only.
 * **Threshold k**: how many standard deviations count as unusual.
 * **Also flag readings equal to 1.0**: the dataset-specific placeholder rule.
+* **Also flag readings next to a short data gap**: the gap-edge rule (both sides
+  of a 2-6 hour hole in the data). On by default.
+* **High-recall mode**: also flags the hour before and after every flagged
+  reading. **On by default**: it finds more real anomalies (recall about 0.58 vs
+  0.51) but raises more false alarms (precision about 0.61 vs 0.81). For
+  electricity readings a missed fault usually costs more than checking a false
+  alarm. Untick it to get the F1-best setting used as the main accuracy result.
 * **Show ground-truth anomalies**: black diamonds on the chart.
 
 ## Tabs
 
 1. **Explore & detect**: readings line, shaded normal band (mean ± k standard
-   deviations, the same one the detector uses), coloured dots for flagged spikes /
-   drops / stuck values, and a table of flagged readings.
+   deviations, the same one the detector uses), coloured dots for flagged spikes
+   (red) / drops (purple) / stuck values (orange) / gap edges (green) / high-recall
+   neighbours (grey), and a table of flagged readings.
 2. **Skip list vs brute force**: the same query run on both, with time per query,
    key comparisons vs rows inspected, speed-up, and a check that both return exactly
    the same rows. Below it, the saved benchmark across dataset sizes.
@@ -51,7 +59,7 @@ the accuracy views are disabled. First start takes a few seconds to build the in
 
 ## Notes
 
-* The brute force (`brute_force_demo.py`) filters on the CSV's coarse `ts` column
+* The brute force (`03_brute_force.py`) filters on the CSV's coarse `ts` column
   (1,000 s steps); the skip list uses the exact `timestamp`. For whole-hour windows
   (all the slider allows) both return identical rows; `09_test_ui.py` checks 150 random
   windows and also documents the non-whole-hour case where they could differ.
@@ -67,6 +75,6 @@ the accuracy views are disabled. First start takes a few seconds to build the in
 ## Tests
 
 ```bash
-python -m pytest            # all three parts: 60 tests
+python -m pytest            # all three parts: 61 tests
 python -m pytest 09_test_ui.py
 ```
