@@ -9,10 +9,10 @@ skip-list range query (`store.query_raw`), as the problem statement requires.
 
 | File | Purpose |
 |---|---|
-| `anomaly.py` | `AnomalyDetector`, baseline statistics, z-score maths, the `Anomaly` result type. |
-| `evaluation.py` | Loads ground truth by key; precision / recall / F1; event recall; tune/test building split. |
-| `run_anomaly_eval.py` | Runs the whole evaluation and writes `anomaly_results.csv` and `anomaly_tuning_sweep.csv`. |
-| `test_anomaly.py` | 23 tests: planted anomalies, edge cases, metric maths, real-data checks. |
+| `05_anomaly.py` | `AnomalyDetector`, baseline statistics, z-score maths, the `Anomaly` result type. |
+| `06_evaluation.py` | Loads ground truth by key; precision / recall / F1; event recall; tune/test building split. |
+| `07_run_anomaly_eval.py` | Runs the whole evaluation and writes `anomaly_results.csv` and `anomaly_tuning_sweep.csv`. |
+| `06_test_anomaly.py` | 23 tests: planted anomalies, edge cases, metric maths, real-data checks. |
 
 ## How it works
 
@@ -39,8 +39,11 @@ Edge behaviour: a building (or hour) with zero spread cannot be judged and gets
 statistics; unknown building, empty window, or `start > end` return `[]`.
 
 ```python
-from timeseries_store import TimeSeriesStore
-from anomaly import AnomalyDetector
+from importlib import import_module   # file names start with a digit
+_timeseries_store = import_module("02_timeseries_store")
+TimeSeriesStore = _timeseries_store.TimeSeriesStore
+_anomaly = import_module("05_anomaly")
+AnomalyDetector = _anomaly.AnomalyDetector
 
 store = TimeSeriesStore.from_csv("store_data.csv", seed=42)
 det = AnomalyDetector(store, method="hourly", k=5.0)      # sentinel_value=1.0 by default
@@ -123,7 +126,7 @@ or all splits, rather than a single number.
 
 ```bash
 STORE_DATA_CSV=store_data.csv GROUND_TRUTH_CSV=ground_truth.csv python -m pytest -v
-python run_anomaly_eval.py --store-csv store_data.csv --truth-csv ground_truth.csv
+python 07_run_anomaly_eval.py --store-csv store_data.csv --truth-csv ground_truth.csv
 ```
 
 ## Limitations

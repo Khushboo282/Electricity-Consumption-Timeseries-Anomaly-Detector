@@ -8,19 +8,21 @@ scanning the whole dataset.
 
 | File | Purpose |
 |---|---|
-| `skiplist.py` | The skip list itself (`insert`, `search`, `get`, `range_query`, `check_invariants`). Generic: works with any comparable keys. |
-| `timeseries_store.py` | Storage/query layer: loads the CSV, builds the keys, exposes `query(building_id, start, end)`. |
-| `brute_force.py` | Linear-scan baseline. Also the "correctness oracle" for the tests. (Teammate's version can replace it, same signature.) |
-| `test_skiplist.py` | 24 tests: unit, edge cases, randomized, real-data comparison. |
-| `benchmark.py` | Skip list vs linear scan; writes `benchmark_results.csv` and `benchmark_plot.png`. |
-| `anomaly.py`, `evaluation.py`, `run_anomaly_eval.py`, `test_anomaly.py` | Part 2, anomaly detection: see `README_anomaly.md`. |
+| `01_skiplist.py` | The skip list itself (`insert`, `search`, `get`, `range_query`, `check_invariants`). Generic: works with any comparable keys. |
+| `02_timeseries_store.py` | Storage/query layer: loads the CSV, builds the keys, exposes `query(building_id, start, end)`. |
+| `03_brute_force.py` | Linear-scan baseline. Also the "correctness oracle" for the tests. (Teammate's version can replace it, same signature.) |
+| `03_test_skiplist.py` | 24 tests: unit, edge cases, randomized, real-data comparison. |
+| `04_benchmark.py` | Skip list vs linear scan; writes `benchmark_results.csv` and `benchmark_plot.png`. |
+| `05_anomaly.py`, `06_evaluation.py`, `07_run_anomaly_eval.py`, `06_test_anomaly.py` | Part 2, anomaly detection: see `README_anomaly.md`. |
 
 Requirements: Python 3.9+ (tested on 3.12), `pandas` (CSV parsing), `pytest` (tests), `matplotlib` (plot, optional).
 
 ## Quick start
 
 ```python
-from timeseries_store import TimeSeriesStore
+from importlib import import_module   # file names start with a digit
+_timeseries_store = import_module("02_timeseries_store")
+TimeSeriesStore = _timeseries_store.TimeSeriesStore
 
 store = TimeSeriesStore.from_csv("store_data.csv", seed=42)   # ~2 s for 262,719 rows
 store.query(107, "2016-01-01 09:00", "2016-01-01 12:00")
@@ -103,8 +105,8 @@ Run everything:
 
 ```bash
 STORE_DATA_CSV=path/to/store_data.csv python -m pytest -v
-python -m doctest skiplist.py
-python benchmark.py --csv path/to/store_data.csv
+python -m doctest 01_skiplist.py
+python 04_benchmark.py --csv path/to/store_data.csv
 ```
 
 ## Benchmark results

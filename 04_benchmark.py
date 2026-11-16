@@ -1,8 +1,8 @@
 """
-benchmark.py -- Skip list vs linear scan.
+04_benchmark.py -- Skip list vs linear scan.
 
-Run:  python benchmark.py                       (finds store_data.csv automatically)
-      python benchmark.py --csv "C:/path/to/store_data.csv"
+Run:  python 04_benchmark.py                       (finds store_data.csv automatically)
+      python 04_benchmark.py --csv "C:/path/to/store_data.csv"
       (optional: --sizes 10000 50000 100000 262719 --queries 50 --repeats 3)
 
 WHAT IT MEASURES
@@ -36,8 +36,12 @@ import os
 import random
 import time
 
-from brute_force import brute_force_query_raw
-from timeseries_store import TimeSeriesStore, load_rows
+from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
+_brute_force = import_module("03_brute_force")
+brute_force_query_raw = _brute_force.brute_force_query_raw
+_timeseries_store = import_module("02_timeseries_store")
+TimeSeriesStore = _timeseries_store.TimeSeriesStore
+load_rows = _timeseries_store.load_rows
 
 WINDOWS_HOURS = [6, 24, 120]
 
@@ -69,7 +73,7 @@ def find_csv(explicit=None):
             tried.append(path)
     raise SystemExit("store_data.csv not found. Looked in:\n  " + "\n  ".join(tried)
                      + "\nPut the file in one of those places, or run:\n"
-                       "  python benchmark.py --csv \"C:\\full\\path\\to\\store_data.csv\"")
+                       "  python 04_benchmark.py --csv \"C:\\full\\path\\to\\store_data.csv\"")
 
 
 def compact(rows):

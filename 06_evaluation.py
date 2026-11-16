@@ -1,5 +1,5 @@
 """
-evaluation.py -- Measuring how accurate the anomaly detector is.
+06_evaluation.py -- Measuring how accurate the anomaly detector is.
 
 The ground truth file has one row per reading with ``anomaly`` = 0 or 1. Only
 about 1.2 % of the readings are anomalies, so PLAIN ACCURACY IS MEANINGLESS
@@ -27,7 +27,9 @@ from typing import Dict, Iterable, List, Sequence, Set, Tuple
 
 import pandas as pd
 
-from timeseries_store import timestamps_to_epochs
+from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
+_timeseries_store = import_module("02_timeseries_store")
+timestamps_to_epochs = _timeseries_store.timestamps_to_epochs
 
 Key = Tuple[int, int]
 SECONDS_PER_HOUR = 3600

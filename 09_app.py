@@ -1,7 +1,7 @@
 """
-app.py -- Streamlit UI for the Time-Series Store with Anomaly Detection.
+09_app.py -- Streamlit UI for the Time-Series Store with Anomaly Detection.
 
-Run:   streamlit run app.py
+Run:   streamlit run 09_app.py
 (The data files are looked up in ./data next to this file; see the sidebar.)
 
 WHAT THE APP SHOWS
@@ -25,11 +25,26 @@ import time
 import pandas as pd
 import streamlit as st
 
-from anomaly import AnomalyDetector
-from evaluation import anomaly_runs, event_recall, load_ground_truth, score
-from timeseries_store import TimeSeriesStore, to_epoch
-from ui_helpers import (HERE, brute_keys, brute_range, build_explore_chart,
-                        data_blocks, find_data_file, load_brute_force, time_best_us)
+from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
+_anomaly = import_module("05_anomaly")
+AnomalyDetector = _anomaly.AnomalyDetector
+_evaluation = import_module("06_evaluation")
+anomaly_runs = _evaluation.anomaly_runs
+event_recall = _evaluation.event_recall
+load_ground_truth = _evaluation.load_ground_truth
+score = _evaluation.score
+_timeseries_store = import_module("02_timeseries_store")
+TimeSeriesStore = _timeseries_store.TimeSeriesStore
+to_epoch = _timeseries_store.to_epoch
+_ui_helpers = import_module("08_ui_helpers")
+HERE = _ui_helpers.HERE
+brute_keys = _ui_helpers.brute_keys
+brute_range = _ui_helpers.brute_range
+build_explore_chart = _ui_helpers.build_explore_chart
+data_blocks = _ui_helpers.data_blocks
+find_data_file = _ui_helpers.find_data_file
+load_brute_force = _ui_helpers.load_brute_force
+time_best_us = _ui_helpers.time_best_us
 
 st.set_page_config(page_title="Time-Series Store + Anomaly Detection", layout="wide")
 
@@ -95,7 +110,7 @@ with st.sidebar:
 
 if not store_csv or not os.path.isfile(store_csv):
     st.error("Could not find **store_data.csv**. Put it in a `data` folder next to "
-             "`app.py`, set the STORE_DATA_CSV environment variable, or type its "
+             "`09_app.py`, set the STORE_DATA_CSV environment variable, or type its "
              "path in the sidebar (Data files).")
     st.stop()
 

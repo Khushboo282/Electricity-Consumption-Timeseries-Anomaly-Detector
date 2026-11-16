@@ -1,7 +1,7 @@
 """
-test_ui.py -- Tests for the UI layer.
+09_test_ui.py -- Tests for the UI layer.
 
-Run:  python -m pytest test_ui.py -v
+Run:  python -m pytest 09_test_ui.py -v
 Needs the data files for the integration tests (env STORE_DATA_CSV /
 GROUND_TRUTH_CSV, or a ./data folder); those tests are skipped otherwise.
 
@@ -21,11 +21,27 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from anomaly import AnomalyDetector, Baseline, compute_baseline, signed_z
-from timeseries_store import TimeSeriesStore, to_epoch
-from ui_helpers import (band_frame, brute_keys, brute_range, build_explore_chart,
-                        data_blocks, find_data_file, load_brute_force, normal_range,
-                        series_frame, time_best_us, to_brute_ts)
+from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
+_anomaly = import_module("05_anomaly")
+AnomalyDetector = _anomaly.AnomalyDetector
+Baseline = _anomaly.Baseline
+compute_baseline = _anomaly.compute_baseline
+signed_z = _anomaly.signed_z
+_timeseries_store = import_module("02_timeseries_store")
+TimeSeriesStore = _timeseries_store.TimeSeriesStore
+to_epoch = _timeseries_store.to_epoch
+_ui_helpers = import_module("08_ui_helpers")
+band_frame = _ui_helpers.band_frame
+brute_keys = _ui_helpers.brute_keys
+brute_range = _ui_helpers.brute_range
+build_explore_chart = _ui_helpers.build_explore_chart
+data_blocks = _ui_helpers.data_blocks
+find_data_file = _ui_helpers.find_data_file
+load_brute_force = _ui_helpers.load_brute_force
+normal_range = _ui_helpers.normal_range
+series_frame = _ui_helpers.series_frame
+time_best_us = _ui_helpers.time_best_us
+to_brute_ts = _ui_helpers.to_brute_ts
 
 HOUR = 3600
 DAY = 24 * HOUR
@@ -203,7 +219,7 @@ def test_app_runs_headlessly_and_responds_to_controls():
     truth = _find("GROUND_TRUTH_CSV", "ground_truth.csv")
     if truth:
         os.environ["GROUND_TRUTH_CSV"] = truth
-    app_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py")
+    app_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "09_app.py")
     at = AppTest.from_file(app_file, default_timeout=240).run()
     assert not at.exception
     metrics = {m.label: m.value for m in at.metric}

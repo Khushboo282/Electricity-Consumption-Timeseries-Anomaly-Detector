@@ -1,7 +1,7 @@
 """
-test_anomaly.py -- How we know the anomaly detector works.
+06_test_anomaly.py -- How we know the anomaly detector works.
 
-Run:  python -m pytest test_anomaly.py -v
+Run:  python -m pytest 06_test_anomaly.py -v
 Real-data tests need the readings and labels (env vars STORE_DATA_CSV and
 GROUND_TRUTH_CSV, or files next to this script); otherwise they are skipped.
 
@@ -21,11 +21,24 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from anomaly import (AnomalyDetector, Baseline, compute_baseline, hour_of_day,
-                     mean_and_std, signed_z)
-from evaluation import (anomaly_runs, event_recall, load_ground_truth, restrict,
-                        score, split_buildings)
-from timeseries_store import TimeSeriesStore, to_epoch
+from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
+_anomaly = import_module("05_anomaly")
+AnomalyDetector = _anomaly.AnomalyDetector
+Baseline = _anomaly.Baseline
+compute_baseline = _anomaly.compute_baseline
+hour_of_day = _anomaly.hour_of_day
+mean_and_std = _anomaly.mean_and_std
+signed_z = _anomaly.signed_z
+_evaluation = import_module("06_evaluation")
+anomaly_runs = _evaluation.anomaly_runs
+event_recall = _evaluation.event_recall
+load_ground_truth = _evaluation.load_ground_truth
+restrict = _evaluation.restrict
+score = _evaluation.score
+split_buildings = _evaluation.split_buildings
+_timeseries_store = import_module("02_timeseries_store")
+TimeSeriesStore = _timeseries_store.TimeSeriesStore
+to_epoch = _timeseries_store.to_epoch
 
 HOUR = 3600
 START = to_epoch("2016-01-01 00:00")

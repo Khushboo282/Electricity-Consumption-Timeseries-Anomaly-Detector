@@ -1,8 +1,8 @@
 """
-run_anomaly_eval.py -- Measure anomaly-detection accuracy against ground truth.
+07_run_anomaly_eval.py -- Measure anomaly-detection accuracy against ground truth.
 
 Run:
-    python run_anomaly_eval.py --store-csv store_data.csv --truth-csv ground_truth.csv
+    python 07_run_anomaly_eval.py --store-csv store_data.csv --truth-csv ground_truth.csv
 
 PROTOCOL (so the reported numbers can be trusted)
   1. Build the skip-list store from the readings; load the labels by KEY.
@@ -30,10 +30,19 @@ import csv
 import os
 import time
 
-from anomaly import AnomalyDetector, signed_z
-from evaluation import (anomaly_runs, event_recall, load_ground_truth, restrict,
-                        score, split_buildings)
-from timeseries_store import TimeSeriesStore
+from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
+_anomaly = import_module("05_anomaly")
+AnomalyDetector = _anomaly.AnomalyDetector
+signed_z = _anomaly.signed_z
+_evaluation = import_module("06_evaluation")
+anomaly_runs = _evaluation.anomaly_runs
+event_recall = _evaluation.event_recall
+load_ground_truth = _evaluation.load_ground_truth
+restrict = _evaluation.restrict
+score = _evaluation.score
+split_buildings = _evaluation.split_buildings
+_timeseries_store = import_module("02_timeseries_store")
+TimeSeriesStore = _timeseries_store.TimeSeriesStore
 
 K_GRID = [2, 2.5, 3, 3.5, 4, 5, 6, 8, 10]
 SENTINEL = 1.0

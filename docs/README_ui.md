@@ -8,7 +8,7 @@ scan, and check accuracy against the ground truth.
 
 ```
 project folder/
-  app.py  ui_helpers.py  skiplist.py  timeseries_store.py  anomaly.py  evaluation.py
+  09_app.py  08_ui_helpers.py  01_skiplist.py  02_timeseries_store.py  05_anomaly.py  06_evaluation.py
   brute_force_demo.py        <- the teammate's brute force (used unmodified)
   data/
     store_data.csv
@@ -17,10 +17,10 @@ project folder/
 
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run 09_app.py
 ```
 
-The app looks for the CSVs in `data/` next to `app.py` first (then the project
+The app looks for the CSVs in `data/` next to `09_app.py` first (then the project
 folder, `processed data/`, and the current folder). To use other locations set the
 environment variables `STORE_DATA_CSV` / `GROUND_TRUTH_CSV`, or type the paths in
 the sidebar under *Data files*. Without `ground_truth.csv` the app still works; only
@@ -46,21 +46,21 @@ the accuracy views are disabled. First start takes a few seconds to build the in
    the same rows. Below it, the saved benchmark across dataset sizes.
 3. **Accuracy**: TP / FP / FN for the current window; optionally precision / recall / F1
    over all 192 buildings with the current settings; and the held-out table from
-   `run_anomaly_eval.py`.
+   `07_run_anomaly_eval.py`.
 4. **About**: short explanation and caveats.
 
 ## Notes
 
 * The brute force (`brute_force_demo.py`) filters on the CSV's coarse `ts` column
   (1,000 s steps); the skip list uses the exact `timestamp`. For whole-hour windows
-  (all the slider allows) both return identical rows; `test_ui.py` checks 150 random
+  (all the slider allows) both return identical rows; `09_test_ui.py` checks 150 random
   windows and also documents the non-whole-hour case where they could differ.
 * "Score every building" uses all buildings, including the ones the threshold was
   tuned on, so it is optimistic. Report the held-out table.
 * Timings are best-of-several in pure Python and vary by machine and by what else
   is running.
-* `ui_helpers.py` holds the logic that can be tested without a browser;
-  `test_ui.py` also drives the whole app headlessly (clicks through the controls).
+* `08_ui_helpers.py` holds the logic that can be tested without a browser;
+  `09_test_ui.py` also drives the whole app headlessly (clicks through the controls).
   The app was tested that way and its chart was rendered to an image and inspected,
   but it was not opened in a real browser during development.
 
@@ -68,5 +68,5 @@ the accuracy views are disabled. First start takes a few seconds to build the in
 
 ```bash
 python -m pytest            # all three parts: 60 tests
-python -m pytest test_ui.py
+python -m pytest 09_test_ui.py
 ```
