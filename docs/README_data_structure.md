@@ -1,142 +1,142 @@
-# Skip-List Index for the Time-Series Store
+# The Skip List Index
 
-Part 1 of the project (querying): a **skip list written from scratch** that
-answers "all readings of building *B* between time *t1* and *t2*" without
-scanning the whole dataset.
+This part answers "all readings of building B between time t1 and t2" **without looking at
+every row**. It uses a skip list that we wrote from scratch (no `bisect`, `sortedcontainers` or
+tree libraries).
 
 ## Files
 
-| File | Purpose |
+| File | What it does |
 |---|---|
-| `01_skiplist.py` | The skip list itself (`insert`, `search`, `get`, `range_query`, `check_invariants`). Generic: works with any comparable keys. |
-| `02_timeseries_store.py` | Storage/query layer: loads the CSV, builds the keys, exposes `query(building_id, start, end)`. |
-| `03_brute_force.py` | Linear-scan baseline. Also the "correctness oracle" for the tests. (Teammate's version can replace it, same signature.) |
-| `03_test_skiplist.py` | 24 tests: unit, edge cases, randomized, real-data comparison. |
-| `04_benchmark.py` | Skip list vs linear scan; writes `benchmark_results.csv` and `benchmark_plot.png`. |
-| `05_anomaly.py`, `06_evaluation.py`, `07_run_anomaly_eval.py`, `06_test_anomaly.py` | Part 2, anomaly detection: see `README_anomaly.md`. |
-
-Requirements: Python 3.9+ (tested on 3.12), `pandas` (CSV parsing), `pytest` (tests), `matplotlib` (plot, optional).
+| `01_skiplist.py` | The skip list: `insert`, `get`, `search`, `range_query`, `check_invariants`. Works with any sortable keys. |
+| `02_timeseries_store.py` | Loads the CSV, turns each row into a key, and offers `query(building_id, start, end)`. |
+| `03_brute_force.py` | The linear scan: checks every row. Used to measure speed and to check the skip list's answers. |
+| `03_test_skiplist.py` | 24 tests. |
+| `04_benchmark.py` | Times skip list vs linear scan; writes `benchmark_results.csv` and `benchmark_plot.png`. |
 
 ## Quick start
 
 ```python
 from importlib import import_module   # file names start with a digit
-_timeseries_store = import_module("02_timeseries_store")
-TimeSeriesStore = _timeseries_store.TimeSeriesStore
+TimeSeriesStore = import_module("02_timeseries_store").TimeSeriesStore
 
-store = TimeSeriesStore.from_csv("store_data.csv", seed=42)   # ~2 s for 262,719 rows
+store = TimeSeriesStore.from_csv("data/store_data.csv", seed=42)   # about 2 s
 store.query(107, "2016-01-01 09:00", "2016-01-01 12:00")
 # -> [(datetime(2016, 1, 1, 9, 0), 1.0), (datetime(2016, 1, 1, 10, 0), 1.0),
 #     (datetime(2016, 1, 1, 11, 0), 1.0), (datetime(2016, 1, 1, 12, 0), 1.0)]
 
-store.buildings()      # [107, 108, 111, 112, 117, ...]  192 ids (for a UI dropdown)
-store.span(107)        # (datetime(2016, 1, 1, 0, 0), datetime(2016, 12, 5, 14, 0))
+store.buildings()      # [107, 108, 111, ...]  all 192 building ids
+store.span(107)        # first and last reading time of building 107
 ```
 
-`query` returns `[(datetime, meter_reading), ...]` sorted by time, both ends
-inclusive. It returns an empty list for an unknown building, a range with no
-data (e.g. inside one of the data gaps), or `start > end`.
+`query` returns `[(time, reading), ...]` sorted by time. Both ends are included. You get an empty
+list for an unknown building, a time range with no data, or `start > end`.
 
-## Design
+## The key: `(building_id, time)`
 
-**Key = `(building_id, epoch_seconds)`, value = `meter_reading`.**
-The file has 192 buildings sharing the same timestamps, so time alone is not
-unique. Python compares tuples element by element, so each building's readings
-form one contiguous, time-ordered run inside the skip list. A query for one
-building is then a single range query bounded by `(B, t1)` and `(B, t2)`; it
-cannot leak into a neighbouring building.
+All 192 buildings share the same timestamps, so time alone is not unique. We use the pair
+`(building_id, time)` as the key. Python compares pairs item by item (building first, then
+time), so in the skip list:
+
+```
+(107, 09:00) (107, 10:00) (107, 11:00) ... (108, 00:00) (108, 01:00) ...
+```
+
+One building's readings sit together, in time order. "Building 107 from t1 to t2" is then
+**one** range query from `(107, t1)` to `(107, t2)`, and it can never pick up another building.
 
 Other choices:
 
-* The CSV column `ts` is **ignored**: it can differ from `timestamp` by up to
-  ~13 minutes. We parse `timestamp` instead.
-* Times are timezone-naive; stored as integer seconds (fast to compare).
-* Raw values are stored untouched: no cleaning, no gap filling, no
-  normalisation. The `1.0` readings are kept because they are labelled
-  anomalies in `ground_truth.csv`.
-* The file is not sorted by time; that is fine, the skip list sorts as it inserts.
+- **Time is stored as whole seconds since 1970** (for example `1451606400`). Whole numbers
+  compare quickly, and "one hour later" is just `+ 3600`.
+- **The CSV's `ts` column is not used.** It's a rounded version of the time that can be off by
+  up to about 13 minutes. We read the exact `timestamp` column instead.
+- **Readings are stored exactly as they are**: no cleaning, no filling of missing hours. The
+  `1.0` readings are kept on purpose, because the labels mark them as anomalies.
+- **The file doesn't need to be sorted.** The skip list puts every key in order as it's
+  inserted.
 
-### How the skip list works
+## How a skip list works
 
-A skip list is a sorted linked list with extra "express lanes". Each node gets
-a random tower height (each extra level with probability `p = 0.5`). To find a
-key we start at the top lane, move right while the next key is smaller than the
-target, then drop a level, and repeat. On the bottom level we are standing just
-before the first key that is `>=` the target.
+A skip list is a **sorted linked list with express lanes**:
 
-`range_query(lo, hi)`: (1) descend to the first key `>= lo`; (2) walk the bottom
-level collecting keys until one exceeds `hi`.
+```
+Level 3:  HEAD ---------------------------> 40 ------------------> None
+Level 2:  HEAD ---------> 10 -------------> 40 ------> 70 -------> None
+Level 1:  HEAD --> 5 ---> 10 --> 25 ------> 40 --> 55 --> 70 --> 90 -> None
+```
+
+Level 1 holds every key. Each higher level holds roughly half the keys of the level below.
+
+**Searching.** Start at the top left. Move right while the next key is still smaller than the
+one you want; when you can't, drop down one level. On the bottom level, the next node is the
+first key that is greater than or equal to your target.
+
+**Range query for 20 to 60** on the picture:
+
+1. Level 3: the next key is 40, which isn't smaller than 20, so drop down.
+2. Level 2: move to 10 (smaller than 20). The next key is 40, which isn't, so drop down.
+3. Level 1: the next key is 25. This is the first key >= 20.
+4. Walk right collecting 25, 40, 55. Stop at 70 (bigger than 60).
+
+Most of the list is never touched.
+
+**How tall is each node?** When a key is inserted we flip a coin: heads, the node also goes one
+level higher; flip again, and so on. About half the nodes reach level 2, a quarter reach level 3,
+and so on. This randomness keeps the list balanced on average without any rebalancing code,
+which makes it much simpler to write than a balanced tree.
 
 | Operation | Expected cost |
 |---|---|
 | `insert`, `search`, `get` | O(log n) |
-| `range_query` | O(log n + k), *k* = results returned |
-| memory | O(n) |
-| brute-force scan (for comparison) | O(n) for **every** query |
+| `range_query` | O(log n + k), where k = number of results |
+| linear scan, for comparison | O(n) for **every** query |
 
-Reference: W. Pugh, *Skip Lists: A Probabilistic Alternative to Balanced Trees*,
-CACM 33(6), 1990.
+Settings: `max_level=20` (enough for about a million keys), `p=0.5` (the coin flip), and `seed`
+so results are reproducible. We left out `delete` on purpose, because the project never removes
+readings.
 
-Parameters: `max_level=20` (about log2 of the largest n we expect; 2^18 is
-262,144), `p=0.5`, `seed` for reproducibility. Not implemented on purpose:
-`delete` (the project never removes readings).
+## How we know it is correct
 
-## How we know it works
-
-1. **Correctness against an oracle.** On real data, 300 random queries (widths
-   from a single instant to over a year, start times before/at readings) must
-   return exactly the same list as the brute-force scan. The benchmark repeats
-   this check on every query it times and aborts on any mismatch.
-2. **Edge cases:** empty list, duplicate keys, key absent/present, range below
-   all data / above all data / between two keys / single instant / `lo > hi` /
-   covering everything, unknown building, ranges inside and across the 25-day
-   gaps, neighbouring buildings never leaking into a result.
-3. **Structure checks:** `check_invariants()` verifies the bottom level is
-   strictly sorted with exactly `len` keys and that each higher level is a
-   sorted sub-list of the one below. A randomized test compares thousands of
-   inserts and queries with a plain dictionary.
-4. **Independent check:** for all 192 buildings, a whole-history query returns
-   exactly the row count that `pandas.groupby` reports.
-5. **Do the tests actually catch bugs?** We deliberately broke the code three
-   ways (upper bound exclusive, search overshooting equal keys, duplicates not
-   detected); the suite failed each time.
-
-Run everything:
+1. **Same answers as the linear scan.** On the real data, 300 random queries must return exactly
+   the same list as the brute force. The benchmark also checks every query it times.
+2. **Edge cases**: empty list, duplicate keys, ranges below, above or between all data, `lo > hi`,
+   unknown building, ranges inside the gaps between data blocks, and no "leaking" into the next
+   building.
+3. **Structure checks**: `check_invariants()` checks that every level is sorted and that each
+   level only contains keys from the level below.
+4. **Random testing**: thousands of random inserts and queries compared with a plain dictionary.
+5. **Do the tests catch bugs?** We broke the code on purpose three ways (excluded the upper bound,
+   made search overshoot, stopped detecting duplicates). The tests failed each time.
 
 ```bash
-STORE_DATA_CSV=path/to/store_data.csv python -m pytest -v
-python -m doctest 01_skiplist.py
-python 04_benchmark.py --csv path/to/store_data.csv
+python -m pytest 03_test_skiplist.py -v
+python 04_benchmark.py
 ```
 
 ## Benchmark results
 
-Pure-Python, same queries and rows for both methods, best of 3 repeats, 50
-queries per cell (run in the development sandbox; **your numbers will differ**
-with your machine, but the shape should not):
+Time per query for a 24-hour window, pure Python, best of 3 runs. Your numbers will be different
+on your machine, but the pattern should be the same:
 
-| n readings | window | results/query | skip list | linear scan | speed-up |
-|---|---|---|---|---|---|
-| 10,000 | 24 h | 1.7 | 2.5 µs | 286 µs | ~110x |
-| 50,000 | 24 h | 4.9 | 3.3 µs | 1.6 ms | ~490x |
-| 100,000 | 24 h | 8.9 | 8.6 µs | 5.4 ms | ~630x |
-| 262,719 | 24 h | 20.9 | 6.3 µs | 10.6 ms | ~1,700x |
+| Readings stored | Results per query | Skip list | Linear scan | Speed-up |
+|---|---|---|---|---|
+| 10,000 | 1.7 | 4.3 µs | 0.46 ms | ~110x |
+| 50,000 | 4.9 | 6.3 µs | 2.7 ms | ~420x |
+| 100,000 | 8.9 | 5.5 µs | 4.7 ms | ~870x |
+| 262,719 | 20.9 | 17.4 µs | 10.7 ms | ~620x |
 
-The scan time grows with n; the skip list time barely moves (its height grows
-only from 14 to 17 levels). Full table: `benchmark_results.csv`; chart:
-`benchmark_plot.png` (log scale on the y-axis).
+The linear scan's time grows with the number of readings. The skip list's time barely changes.
+All window sizes are in `benchmark_results.csv` and `benchmark_plot.png`.
 
-## Limitations and notes for the report
+**How the comparison is kept fair:** both methods get the same rows and the same queries, in the
+same language, and return the same result format. Each time is the best of several runs.
+Smaller datasets are random samples of the full file.
 
-* Everything is in memory; nothing is persisted to disk.
-* Python skip lists have large constant factors, and a NumPy-vectorised scan
-  would be much faster than our pure-Python scan. Say which brute force you
-  compare against.
-* Timings are noisy (other programs, CPU caches). The benchmark copies each
-  dataset into contiguous memory and takes the best of several repeats, but
-  small differences (e.g. 6 vs 9 µs) are not meaningful.
-* The data is hourly, in 5-day blocks with ~25-day gaps, so a 30-minute window
-  returns at most one reading per building.
-* Hooks for the anomaly part: `store.span(b)` gives a building's full time
-  range (one range query returns its whole history), and any time-based window
-  is just `store.query(b, t - window, t)`.
+## Limitations
+
+- Everything is in memory; nothing is saved to disk.
+- A NumPy-based scan would be much faster than our pure-Python one, so say which scan we compare
+  against.
+- Timings vary from run to run, so small differences (for example 6 µs vs 9 µs) don't mean
+  anything.

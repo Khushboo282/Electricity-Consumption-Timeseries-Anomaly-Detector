@@ -1,114 +1,131 @@
-# Anomaly Detection (Part 2)
+# Anomaly Detection
 
-Flags unusual readings **without machine learning**, using only descriptive
-statistics (mean, variance/standard deviation) and a threshold, on top of the
-skip-list store from Part 1. Every reading the detector looks at comes from a
-skip-list range query (`store.query_raw`), as the problem statement requires.
+Flags unusual electricity readings **without machine learning**, using only averages, standard
+deviations and a few simple rules. Every reading the detector looks at comes from a skip list
+range query.
 
 ## Files
 
-| File | Purpose |
+| File | What it does |
 |---|---|
-| `05_anomaly.py` | `AnomalyDetector`, baseline statistics, z-score maths, the `Anomaly` result type. |
-| `06_evaluation.py` | Loads ground truth by key; precision / recall / F1; event recall; tune/test building split. |
-| `07_run_anomaly_eval.py` | Runs the whole evaluation and writes `anomaly_results.csv` and `anomaly_tuning_sweep.csv`, and prints the 10-split robustness table. |
-| `06_test_anomaly.py` | 25 tests: planted anomalies, edge cases, the gap-edge and high-recall rules, metric maths, real-data checks. |
+| `05_anomaly.py` | The detector (`AnomalyDetector`) and the statistics behind it. |
+| `06_evaluation.py` | Loads the labels; computes precision, recall, F1; splits buildings into tune/test halves. |
+| `07_run_anomaly_eval.py` | Runs the full evaluation; writes `anomaly_results.csv` and `anomaly_tuning_sweep.csv`. |
+| `06_test_anomaly.py` | 25 tests. |
 
 ## How it works
 
-1. **Baseline.** One range query fetches a building's whole history; we compute
-   its mean and standard deviation (sample std, `n - 1`). With `method="hourly"`
-   we also compute them per hour of day, because electricity use follows a daily
-   cycle (a 3 a.m. reading should be compared with other 3 a.m. readings).
-2. **Score.** `z = (value - mean) / std`. Positive = above normal, negative = below.
-3. **Flag.** `|z| > k` -> **spike** (z > 0) or **drop** (z < 0).
-4. **Stuck-value rule (dataset-specific).** A reading of exactly `1.0` is
-   flagged as `stuck-value`. In this data 1,193 of the 1,195 readings equal to
-   1.0 are labelled anomalies, so it behaves like a placeholder. This is **not
-   statistics**; it is a rule we found by inspecting the data and labels. Report
-   it separately and say so. Switch off with `sentinel_value=None`.
-5. **Gap-edge rule (dataset-specific).** The data is hourly. When a building has
-   a *short* hole in its data (2 to `max_gap_hours` = 6 missing hours), the
-   readings on **both sides** of the hole are flagged as `gap-edge`: readings
-   around a meter outage are usually unreliable. Long holes (weeks) are just
-   the breaks between the data blocks and are ignored. The previous / next
-   reading is found by **binary search** in the building's sorted timestamps
-   (cached from the baseline range query), so it works even when the neighbour
-   lies outside the requested window. Like the stuck-value rule, it was found
-   by inspecting the data with its labels. Switch off with `max_gap_hours=None`.
-6. **High-recall mode (off in the class, on by default in the app).** With `neighbour_hours=1`,
-   every reading within 1 hour of a reading flagged by rules 3-5 is also
-   flagged, as `neighbour`. Anomalies come in runs of consecutive hours and the
-   rules often catch only part of a run, so this finds more real anomalies, at
-   the cost of more false alarms.
+**Step 1: learn what "normal" is.** One range query fetches a building's whole history. From it
+we compute:
 
-Priority when a reading matches several rules: stuck-value, then spike/drop,
-then gap-edge, then neighbour.
+- the **mean** (average reading), and
+- the **standard deviation**, or **std** (how much readings usually vary around the mean).
 
-Why **per building**: building scales differ by orders of magnitude, so one
-global mean/std would flag the large buildings constantly. Why **not raw
-min/max**: the maximum of a dataset can never be exceeded by that same dataset,
-so a fence built from it flags nothing; the standard deviation supplies the
-usable threshold.
+With `method="hourly"` we compute these **separately for each hour of the day**, because
+electricity use follows a daily cycle: a 3 a.m. reading should be compared with other 3 a.m.
+readings, not with the daily average.
 
-Edge behaviour: a building (or hour) with zero spread cannot be judged and gets
-`z = 0`; an hour with fewer than 10 readings falls back to the building-level
-statistics; unknown building, empty window, or `start > end` return `[]`.
+**Step 2: score each reading.** The **z-score** says how many standard deviations a reading is
+from normal:
+
+```
+z = (reading - mean) / std
+```
+
+Example: building 159 at 14:00 normally averages 13.07 with std 6.26. A reading of 48.73 gives
+`z = (48.73 - 13.07) / 6.26 = 5.70`.
+
+**Step 3: flag it.** A reading is flagged if any of these rules applies:
+
+| Rule | Flags a reading when | Shown as |
+|---|---|---|
+| z-score | `z > k` or `z < -k` | **spike** (above) / **drop** (below) |
+| Stuck value | it is exactly `1.0` | **stuck-value** |
+| Gap edge | it sits right before or after a hole of 2 to 6 missing hours | **gap-edge** |
+| High-recall mode (optional) | it is within 1 hour of a reading flagged above | **neighbour** |
+
+With `k = 5` the example above (z = 5.70) is flagged as a spike.
+
+### About the two dataset rules
+
+- **Stuck value.** 1,195 readings are exactly `1.0`, and 1,193 of them are labelled anomalies.
+  So `1.0` works like a "meter broken" placeholder. Turn it off with `sentinel_value=None`.
+- **Gap edge.** The data is hourly. When a building is missing a few hours, the readings on
+  both sides of that hole are usually bad too (for example, a meter outage). Long gaps of weeks
+  are just the breaks between data blocks and are ignored. To find a reading's previous and next
+  neighbour quickly, we use binary search on the building's sorted times. Turn it off with
+  `max_gap_hours=None`.
+
+These two rules are **not statistics**. We found them by looking at the data together with its
+labels, so always present them as dataset-specific rules.
+
+### Why these choices
+
+- **Per building:** buildings differ hugely in size (building 107 averages about 395, building
+  159 about 10). One shared average would flag the big buildings all the time.
+- **Why not just min / max:** a dataset's own maximum can never be exceeded by that same data,
+  so a fence built from it flags nothing. The standard deviation gives a usable threshold.
+- **Edge cases:** if a building (or hour) never varies (std = 0), we can't judge it, so z = 0.
+  An hour with fewer than 10 readings uses the building's overall statistics instead.
+
+## Using the detector
 
 ```python
 from importlib import import_module   # file names start with a digit
-_timeseries_store = import_module("02_timeseries_store")
-TimeSeriesStore = _timeseries_store.TimeSeriesStore
-_anomaly = import_module("05_anomaly")
-AnomalyDetector = _anomaly.AnomalyDetector
+TimeSeriesStore = import_module("02_timeseries_store").TimeSeriesStore
+AnomalyDetector = import_module("05_anomaly").AnomalyDetector
 
-store = TimeSeriesStore.from_csv("store_data.csv", seed=42)
-det = AnomalyDetector(store, method="hourly", k=5.0)      # sentinel_value=1.0, max_gap_hours=6 by default
-for a in det.detect(107, "2016-01-01", "2016-01-05 23:00"):   # range query for the window
+store = TimeSeriesStore.from_csv("data/store_data.csv", seed=42)
+
+det = AnomalyDetector(store, method="hourly", k=5.0)   # stuck-value and gap-edge rules are on by default
+for a in det.detect(107, "2016-01-01", "2016-01-05 23:00"):
     print(a.time, a.value, a.kind, a.reason)
 
-# best F1 setting, and the high-recall variant
-best = AnomalyDetector(store, method=None)                      # stuck-value + gap-edge
+best = AnomalyDetector(store, method=None)                       # best F1: the two rules only
 high_recall = AnomalyDetector(store, method=None, neighbour_hours=1)
 ```
 
-## Evaluation protocol
+| Method | Returns |
+|---|---|
+| `detect(building, start, end)` | the anomalies in a time window |
+| `detect_history(building)` | the anomalies over the building's whole history |
+| `flagged_keys(building_ids)` | the set of flagged `(building, time)` keys, used for evaluation |
 
-* Plain accuracy is useless (only 1.2 % of readings are anomalies; "never flag
-  anything" scores 98.8 %), so we report **precision, recall, F1** and
-  **event recall** (share of anomaly *runs* where at least one reading was flagged).
-* Labels are matched to readings **by key** `(building, time)`, never by row position.
-* The detectors never see labels. Labels are used only to choose `k` and to score.
-* The 192 buildings are split into two disjoint halves (fixed seed). `k` (grid
-  2 ... 10) and the gap limit (grid 6, 12, 24, 48 hours) are chosen by best F1 on
-  the **tune** half; the reported numbers are on the **test** half.
-* The high-recall mode is not chosen by F1 (F1 would always switch it off); it
-  is reported as a separate operating point with `neighbour_hours=1`.
-* The sweep is saved in `anomaly_tuning_sweep.csv`.
-* **Robustness:** the whole tune-then-test procedure is repeated over 10 random
-  splits (seeds 0-9, option `--splits`), printed at the end of the run.
-* A consistency gate checks that the real `AnomalyDetector` flags exactly the same
-  readings as the fast evaluation path.
+## How accuracy is measured
+
+Only 1.2 % of readings are anomalies, so "never flag anything" would already be 98.8 %
+accurate. Plain accuracy is useless here, so we use:
+
+- **Precision**: of the readings we flagged, the share that were real anomalies.
+- **Recall**: of the real anomalies, the share we found.
+- **F1**: combines both into one number (it is high only when both are high).
+- **Event recall**: anomalies come in runs of consecutive hours. This is the share of runs
+  where we flagged at least one reading.
+
+Small example: we flag 10 readings, 7 are real, and there are 20 real anomalies in total.
+Precision = 7/10 = 0.70, recall = 7/20 = 0.35, F1 = 2 × 0.70 × 0.35 / (0.70 + 0.35) = 0.47.
+
+**To keep the numbers honest:**
+
+1. The detector never sees the labels. Labels are only used to pick `k` and to score.
+2. The 192 buildings are split into two halves. `k` (tried: 2 to 10) and the gap limit (tried:
+   6, 12, 24, 48 hours) are chosen on the **tune** half. Scores are reported on the **test**
+   half, which the choice never saw.
+3. All of this is repeated for 10 different random splits, so one lucky split can't fool us.
+4. A final check confirms that the real `AnomalyDetector` flags exactly the same readings as
+   the faster code used during the evaluation.
+
+```bash
+python 07_run_anomaly_eval.py      # about 1 minute
+```
 
 ## Results
 
-Default split (seed 42): 96 test buildings, 1,540 anomalous readings in 385 runs.
+### Main result: averaged over 10 random splits
 
-| Configuration | k | Gap (h) | Precision | Recall | F1 | Event recall |
-|---|---|---|---|---|---|---|
-| building z-score | 2.5 | - | 0.270 | 0.210 | 0.236 | 0.242 |
-| hourly z-score | 3 | - | 0.349 | 0.226 | 0.274 | 0.239 |
-| stuck-value rule only (== 1.0) | - | - | 1.000 | 0.299 | 0.461 | 0.096 |
-| building z-score + stuck-value | 5 | - | 0.922 | 0.309 | 0.463 | 0.127 |
-| hourly z-score + stuck-value | 5 | - | 0.927 | 0.314 | 0.469 | 0.135 |
-| **stuck-value + gap-edge** | - | 6 | **0.896** | **0.437** | **0.588** | **0.616** |
-| hourly z-score + stuck-value + gap-edge | 5 | 6 | 0.855 | 0.445 | 0.585 | 0.629 |
-| high-recall mode (+ 1 h neighbours) | - | 6 | 0.702 | 0.498 | 0.583 | 0.616 |
+Test scores, average [lowest - highest]:
 
-**These numbers depend on which buildings land in the test half.** Over 10
-random splits (seeds 0-9), test scores, mean [min - max]:
-
-| Configuration | Precision | Recall | F1 | Event recall |
+| Method | Precision | Recall | F1 | Event recall |
 |---|---|---|---|---|
 | building z-score | 0.25 [0.16-0.31] | 0.25 [0.18-0.33] | 0.25 [0.17-0.32] | 0.25 [0.23-0.28] |
 | hourly z-score | 0.32 [0.21-0.48] | 0.30 [0.22-0.37] | 0.30 [0.24-0.36] | 0.28 [0.22-0.33] |
@@ -119,87 +136,79 @@ random splits (seeds 0-9), test scores, mean [min - max]:
 | hourly z-score + stuck-value + gap-edge | 0.79 [0.66-0.89] | 0.52 [0.41-0.60] | 0.63 [0.56-0.71] | 0.67 [0.61-0.74] |
 | high-recall mode | 0.62 [0.48-0.72] | 0.58 [0.47-0.65] | 0.59 [0.54-0.68] | 0.66 [0.61-0.72] |
 
-The default split (seed 42) is one of the less favourable ones for the
-gap-edge rules. The gap-edge rules beat the previous best (hourly z-score +
-stuck-value) on every one of the 10 splits. Report the mean and range, e.g.
-"F1 0.63 (0.56 to 0.71 over 10 splits)", rather than a single number.
+In the report, quote the average and range, for example "F1 0.63 (0.56 to 0.71 over 10 splits)".
 
-## What the results say (for the report)
+### One split in detail (seed 42, saved in `anomaly_results.csv`)
 
-* **Z-scores alone are weak here.** Precision is only 0.2-0.5: most flags are
-  false alarms: plenty of readings the labels call normal are still far from a
-  simple mean/std. Raising `k` improves precision but recall collapses (see the
-  sweep).
-* **The stuck-value rule is very precise (about 1.0) but limited:** it finds
-  30-42 % of anomalous readings, and only 10-15 % of anomaly *runs*, because it
-  catches the long flat outages but not the short ones.
-* **The gap-edge rule is the biggest single improvement:** recall rises from
-  0.39 to 0.52 and event recall from 0.18 to 0.66 (10-split means), because
-  it catches short outages that the stuck-value rule misses. Precision drops
-  from 0.90 to 0.81.
-* **Once both rules are on, the z-score adds almost nothing** (F1 0.63 with or
-  without it).
-* **High-recall mode** trades precision (0.62) for recall (0.58). Choose it
-  when a missed anomaly costs more than checking a false alarm. For
-  electricity readings that is usually the case (a missed meter fault means
-  wrong bills, wasted energy or failing equipment; a false alarm costs a few
-  minutes of checking), so **the app uses it by default**. Pushing further
-  (2 h neighbours: recall 0.60, precision 0.49; z > 2.5 + 1 h neighbours:
-  recall 0.70, precision 0.25) adds more false alarms than real finds.
-  Report the F1-best setting as the main accuracy result and high-recall
-  mode as the operating choice.
-* **Hourly vs building baseline:** the hourly baseline is a little better
-  (F1 0.274 vs 0.236 for z-scores alone) but the difference is small and
-  within the split-to-split variation; do not over-claim it. Its clear benefit
-  appears on data with a strong daily cycle (see the planted-anomaly test).
-* **Ceiling.** About 62 % of the labelled anomalies are NOT at the 1.0 value.
-  Of the ones still missed after both rules, about 94 % are within 3 standard
-  deviations of that building's usual reading for that hour, and some labels
-  look arbitrary. Value-only statistics cannot separate those from normal
-  readings, which caps recall. State this as a limitation, not a failure.
-* **What else we tried and rejected** (all scored lower F1 on the test half):
-  robust median/MAD z-scores, rolling 7-day baselines, hour-to-hour change
-  scores, flat-line runs of repeated values, sudden 2x / 0.5x jumps, and a
-  cross-building rule (many buildings unusual at the same hour). Each added
-  more false alarms than real anomalies.
+96 test buildings, 1,540 anomalous readings in 385 runs. This split is one of the less
+favourable ones for the gap-edge rule.
+
+| Method | k | Gap (h) | Precision | Recall | F1 | Event recall |
+|---|---|---|---|---|---|---|
+| building z-score | 2.5 | - | 0.270 | 0.210 | 0.236 | 0.242 |
+| hourly z-score | 3 | - | 0.349 | 0.226 | 0.274 | 0.239 |
+| stuck-value rule only | - | - | 1.000 | 0.299 | 0.461 | 0.096 |
+| building z-score + stuck-value | 5 | - | 0.922 | 0.309 | 0.463 | 0.127 |
+| hourly z-score + stuck-value | 5 | - | 0.927 | 0.314 | 0.469 | 0.135 |
+| **stuck-value + gap-edge** | - | 6 | **0.896** | **0.437** | **0.588** | **0.616** |
+| hourly z-score + stuck-value + gap-edge | 5 | 6 | 0.855 | 0.445 | 0.585 | 0.629 |
+| high-recall mode | - | 6 | 0.702 | 0.498 | 0.583 | 0.616 |
+
+### What the results mean
+
+- **The z-score alone is weak.** Precision is only about 0.25 to 0.32: many perfectly normal
+  readings are still far from a simple average.
+- **The stuck-value rule is almost always right, but finds only about a third** of anomalous
+  readings. It catches long flat outages, not short events.
+- **The gap-edge rule is the biggest improvement.** Recall goes from 0.39 to 0.52, and runs
+  caught from 0.18 to 0.66, while precision drops only slightly (0.90 to 0.81). It beat the
+  previous best method on every one of the 10 splits.
+- **Once both rules are on, the z-score adds almost nothing** (F1 is 0.63 either way).
+- **Hourly vs building baseline:** hourly is slightly better, but the difference is within the
+  normal split-to-split variation, so don't over-claim it.
+- **There is a ceiling.** Of the anomalies still missed, about 94 % look normal by value (within
+  3 standard deviations), and some labels look arbitrary. No value-based method can find those.
+  This is a limit of the data, not a bug.
+- **Things we tried that did worse:** median-based z-scores, rolling 7-day averages,
+  hour-to-hour change, repeated values, sudden 2x jumps, and "many buildings unusual at the same
+  hour". Each added more false alarms than real finds.
+
+### Why the app uses high-recall mode
+
+For electricity meters, missing a real problem usually costs more than a false alarm:
+
+- **Missed anomaly:** a broken meter gives wrong bills, and faulty equipment keeps wasting
+  energy, until someone notices.
+- **False alarm:** someone looks at a chart for a minute and decides it's fine.
+
+High-recall mode finds more real anomalies (recall 0.58 vs 0.52) at the cost of more false
+alarms (precision 0.62 vs 0.81). Going further (2-hour neighbours, or lower `k`) adds more false
+alarms than real finds. In the report, give the F1-best method as the main result and present
+high-recall mode as the practical choice.
 
 ## How we know it works
 
-* **Planted anomalies:** synthetic buildings (one tiny, one huge) with a daily
-  cycle and known spikes/drops; the hourly detector finds every one with the
-  right `kind`, and raises almost no false alarms. A second test shows the
-  building-level z-score misses a spike hidden at a low-usage hour that the
-  hourly one catches.
-* **Maths:** mean/std checked against NumPy; z-score sign and zero-spread guard;
-  precision/recall/F1 and run/event recall checked against hand-computed examples.
-* **Real data:** every labelled anomaly exists in the store (labels line up);
-  the stuck-value rule flags exactly the 1,195 readings equal to 1.0 with
-  precision above 0.95; adding z-scores to the rule can never lower recall;
-  a larger `k` never flags more readings.
-* **New rules:** the gap-edge rule flags both sides of a 6-hour hole but not a
-  500-hour block break, respects `max_gap_hours`, and still works when the
-  neighbour is outside the window; high-recall mode flags exactly the readings
-  within N hours of a rule flag, including across the window edge.
-* **Consistency gate:** for every configuration, the real `AnomalyDetector`
-  flags exactly the same readings as the fast evaluation path.
-* **Mutation checks:** we deliberately broke the code four ways (spike/drop
-  swapped, population instead of sample std, wrong hour of day, inverted
-  threshold). The suite failed each time. (One test was initially too weak and
-  let the std mutation through; it was fixed.)
+- **Planted anomalies:** fake buildings with spikes and drops at known places. The detector
+  finds all of them, labels each correctly, and raises almost no false alarms.
+- **Why hourly exists:** a test shows a spike at a quiet hour that the building-level method
+  misses but the hourly method catches.
+- **Maths:** mean and std checked against NumPy; precision, recall and F1 checked against
+  hand-worked examples.
+- **Real data:** labels line up with readings; the stuck-value rule flags exactly the 1,195
+  readings equal to 1.0; a larger `k` never flags more readings.
+- **Gap-edge and high-recall rules:** tested on small hand-made examples, including neighbours
+  just outside the requested window.
+- **Deliberate bugs:** we broke the code on purpose four ways. The tests failed every time.
 
 ```bash
-STORE_DATA_CSV=store_data.csv GROUND_TRUTH_CSV=ground_truth.csv python -m pytest -v
-python 07_run_anomaly_eval.py --store-csv store_data.csv --truth-csv ground_truth.csv
+python -m pytest 06_test_anomaly.py -v
 ```
 
 ## Limitations
 
-* The baseline uses the building's whole history, including the readings being
-  judged (standard for unsupervised offline detection, but not a live/streaming
-  setup). It uses no labels.
-* The stuck-value and gap-edge rules are dataset-specific and were found by
-  inspecting the data with its labels, so they are not blind results.
-* Time is naive hourly data in 5-day blocks; a reading cannot be judged against
-  its immediate neighbours across a data gap, so we deliberately use a
-  whole-history baseline instead of a rolling window (a 24-hour rolling z-score
-  scored F1 about 0.04 in our early experiments because of the daily cycle).
+- "Normal" is computed from the building's whole history, including the readings being judged.
+  That's fine for analysing past data, but not for live monitoring.
+- The stuck-value and gap-edge rules only fit this dataset, and we found them by looking at the
+  labels.
+- We use the whole history rather than a rolling window. Because the data comes in 5-day blocks
+  with a strong daily cycle, a 24-hour rolling z-score scored F1 of only about 0.04 in early tests.

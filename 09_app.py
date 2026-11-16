@@ -36,6 +36,7 @@ score = _evaluation.score
 _timeseries_store = import_module("02_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 to_epoch = _timeseries_store.to_epoch
+epoch_to_datetime = _timeseries_store.epoch_to_datetime
 _ui_helpers = import_module("08_ui_helpers")
 HERE = _ui_helpers.HERE
 brute_keys = _ui_helpers.brute_keys
@@ -132,16 +133,15 @@ with st.sidebar:
     history = probe.history(building)
     blocks = data_blocks([e for e, _ in history])
     labels = ["All data (every block)"] + [
-        f"{to_dt:%b %d} to {end_dt:%b %d, %Y}"
-        for to_dt, end_dt in ((dt.datetime(1970, 1, 1) + dt.timedelta(seconds=a),
-                               dt.datetime(1970, 1, 1) + dt.timedelta(seconds=b))
-                              for a, b in blocks)]
+        f"{epoch_to_datetime(first):%b %d} to {epoch_to_datetime(last):%b %d, %Y}"
+        for first, last in blocks]
     block_choice = st.selectbox("Data block", range(len(labels)),
                                 format_func=lambda i: labels[i], index=1 if blocks else 0)
-    first_epoch = history[0][0] if block_choice == 0 else blocks[block_choice - 1][0]
-    last_epoch = history[-1][0] if block_choice == 0 else blocks[block_choice - 1][1]
-    t_min = dt.datetime(1970, 1, 1) + dt.timedelta(seconds=first_epoch)
-    t_max = dt.datetime(1970, 1, 1) + dt.timedelta(seconds=last_epoch)
+    if block_choice == 0:                       # all data
+        first_epoch, last_epoch = history[0][0], history[-1][0]
+    else:
+        first_epoch, last_epoch = blocks[block_choice - 1]
+    t_min, t_max = epoch_to_datetime(first_epoch), epoch_to_datetime(last_epoch)
     if t_min < t_max:
         window = st.slider("Time window (whole hours)", min_value=t_min, max_value=t_max,
                            value=(t_min, t_max), step=dt.timedelta(hours=1),

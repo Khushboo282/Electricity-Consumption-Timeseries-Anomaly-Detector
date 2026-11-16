@@ -1,7 +1,7 @@
 """
 04_benchmark.py -- Skip list vs linear scan.
 
-Run:  python 04_benchmark.py                       (finds store_data.csv automatically)
+Run:  python 04_benchmark.py                       (uses data/store_data.csv)
       python 04_benchmark.py --csv "C:/path/to/store_data.csv"
       (optional: --sizes 10000 50000 100000 262719 --queries 50 --repeats 3)
 
@@ -44,36 +44,6 @@ TimeSeriesStore = _timeseries_store.TimeSeriesStore
 load_rows = _timeseries_store.load_rows
 
 WINDOWS_HOURS = [6, 24, 120]
-
-
-def find_csv(explicit=None):
-    """Return the path of store_data.csv, or stop with a clear message.
-
-    If ``explicit`` (the --csv option) is given it must exist. Otherwise the
-    usual places are searched: next to this script, in data/ or
-    "processed data/" next to it (and one folder up), and the same names
-    relative to the folder the command was started from.
-    """
-    if explicit:
-        if os.path.isfile(explicit):
-            return explicit
-        raise SystemExit(f"--csv file not found: {explicit}")
-    here = os.path.dirname(os.path.abspath(__file__))
-    bases = [here, os.path.dirname(here), os.getcwd()]
-    names = ["store_data.csv", os.path.join("data", "store_data.csv"),
-             os.path.join("processed data", "store_data.csv")]
-    tried = []
-    for base in bases:
-        for name in names:
-            path = os.path.join(base, name)
-            if path in tried:
-                continue
-            if os.path.isfile(path):
-                return path
-            tried.append(path)
-    raise SystemExit("store_data.csv not found. Looked in:\n  " + "\n  ".join(tried)
-                     + "\nPut the file in one of those places, or run:\n"
-                       "  python 04_benchmark.py --csv \"C:\\full\\path\\to\\store_data.csv\"")
 
 
 def compact(rows):
@@ -200,8 +170,8 @@ if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--csv", default=None,
-                    help="path to store_data.csv (default: search the usual places)")
+    ap.add_argument("--csv", default=os.path.join(here, "data", "store_data.csv"),
+                    help="path to store_data.csv (default: data/store_data.csv)")
     ap.add_argument("--sizes", type=int, nargs="+",
                     default=[10_000, 50_000, 100_000, 262_719])
     ap.add_argument("--queries", type=int, default=50)
@@ -209,7 +179,9 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out-dir", default=here)
     args = ap.parse_args()
-    csv_path = find_csv(args.csv)
-    print(f"Using data file: {csv_path}")
-    save(run(csv_path, args.sizes, args.queries, args.repeats, args.seed),
+    if not os.path.isfile(args.csv):
+        raise SystemExit(f"Data file not found: {args.csv}\n"
+                         "Put store_data.csv in the data/ folder, or pass --csv PATH.")
+    print(f"Using data file: {args.csv}")
+    save(run(args.csv, args.sizes, args.queries, args.repeats, args.seed),
          args.out_dir)

@@ -1,80 +1,84 @@
-# UI (Streamlit app)
+# The App (Streamlit)
 
-An interactive front end for the whole project: query a building's readings
-through the skip list, see anomalies on a chart, compare against the brute-force
-scan, and check accuracy against the ground truth.
+An interactive page that shows the whole project at work: pick a building and a time window, see
+its readings and flagged anomalies on a chart, compare the skip list with the brute force, and
+check accuracy against the labels.
 
 ## Run it
-
-```
-project folder/
-  09_app.py  08_ui_helpers.py  01_skiplist.py  02_timeseries_store.py  05_anomaly.py  06_evaluation.py
-  03_brute_force.py             <- the linear-scan brute force
-  data/
-    store_data.csv
-    ground_truth.csv
-```
 
 ```bash
 pip install -r requirements.txt
 streamlit run 09_app.py
 ```
 
-The app looks for the CSVs in `data/` next to `09_app.py` first (then the project
-folder, `processed data/`, and the current folder). To use other locations set the
-environment variables `STORE_DATA_CSV` / `GROUND_TRUTH_CSV`, or type the paths in
-the sidebar under *Data files*. Without `ground_truth.csv` the app still works; only
-the accuracy views are disabled. First start takes a few seconds to build the index.
+It opens in your browser. The first start takes a few seconds while the skip list is built.
+
+The app looks for the CSV files in the `data/` folder. If yours are somewhere else, set the
+environment variables `STORE_DATA_CSV` / `GROUND_TRUTH_CSV`, or type the paths in the sidebar
+under **Data files**. Without `ground_truth.csv` the app still works, but the accuracy views are
+turned off.
 
 ## Sidebar controls
 
-* **Building** (192) and **Data block**: the data comes in up to 12 blocks of about 5
-  days (one per month); pick one or "All data".
-* **Time window**: a slider in whole hours inside the chosen block.
-* **Method**: hourly baseline, building baseline, or the stuck-value rule only.
-* **Threshold k**: how many standard deviations count as unusual.
-* **Also flag readings equal to 1.0**: the dataset-specific placeholder rule.
-* **Also flag readings next to a short data gap**: the gap-edge rule (both sides
-  of a 2-6 hour hole in the data). On by default.
-* **High-recall mode**: also flags the hour before and after every flagged
-  reading. **On by default**: it finds more real anomalies (recall about 0.58 vs
-  0.51) but raises more false alarms (precision about 0.61 vs 0.81). For
-  electricity readings a missed fault usually costs more than checking a false
-  alarm. Untick it to get the F1-best setting used as the main accuracy result.
-* **Show ground-truth anomalies**: black diamonds on the chart.
+| Control | What it does |
+|---|---|
+| Building | pick one of the 192 buildings |
+| Data block | the data comes in blocks of about 5 days (one per month); pick one, or "All data" |
+| Time window | slider (whole hours) inside the chosen block |
+| Method | compare a reading with that hour's normal, with the building's overall normal, or skip the z-score |
+| Threshold k | how many standard deviations away counts as unusual (larger k means fewer flags) |
+| Also flag readings equal to 1.0 | the stuck-value rule |
+| Also flag readings next to a short data gap | the gap-edge rule |
+| High-recall mode | also flags the hour before and after each flagged reading (on by default) |
+| Show ground-truth anomalies | draws the labelled anomalies as black diamonds |
 
 ## Tabs
 
-1. **Explore & detect**: readings line, shaded normal band (mean ± k standard
-   deviations, the same one the detector uses), coloured dots for flagged spikes
-   (red) / drops (purple) / stuck values (orange) / gap edges (green) / high-recall
-   neighbours (grey), and a table of flagged readings.
-2. **Skip list vs brute force**: the same query run on both, with time per query,
-   key comparisons vs rows inspected, speed-up, and a check that both return exactly
-   the same rows. Below it, the saved benchmark across dataset sizes.
-3. **Accuracy**: TP / FP / FN for the current window; optionally precision / recall / F1
-   over all 192 buildings with the current settings; and the held-out table from
-   `07_run_anomaly_eval.py`.
-4. **About**: short explanation and caveats.
+1. **Explore & detect**: the chart, plus a table of flagged readings.
+2. **Skip list vs brute force**: runs the same query both ways and shows the time each took,
+   how much work each did, and a check that both returned the same rows.
+3. **Accuracy**: correct flags, false alarms and misses for the current window. You can also
+   score all 192 buildings, and see the held-out results from `07_run_anomaly_eval.py`.
+4. **About**: a short explanation.
 
-## Notes
+## Reading the chart
 
-* The brute force (`03_brute_force.py`) filters on the CSV's coarse `ts` column
-  (1,000 s steps); the skip list uses the exact `timestamp`. For whole-hour windows
-  (all the slider allows) both return identical rows; `09_test_ui.py` checks 150 random
-  windows and also documents the non-whole-hour case where they could differ.
-* "Score every building" uses all buildings, including the ones the threshold was
-  tuned on, so it is optimistic. Report the held-out table.
-* Timings are best-of-several in pure Python and vary by machine and by what else
-  is running.
-* `08_ui_helpers.py` holds the logic that can be tested without a browser;
-  `09_test_ui.py` also drives the whole app headlessly (clicks through the controls).
-  The app was tested that way and its chart was rendered to an image and inspected,
-  but it was not opened in a real browser during development.
+| Mark | Meaning |
+|---|---|
+| Blue line | the readings (it breaks where data is missing) |
+| Shaded band | the "normal" range: mean ± k standard deviations |
+| Red dot | spike (too high) |
+| Purple dot | drop (too low) |
+| Orange dot | stuck value (exactly 1.0) |
+| Green dot | gap edge (next to a short hole in the data) |
+| Grey dot | high-recall neighbour (within 1 hour of another flag) |
+| Black diamond | a real anomaly according to the labels |
+
+A diamond **without** a dot is an anomaly we missed. A dot **without** a diamond is a false
+alarm.
+
+Tip: with the default `k = 5` you'll mostly see orange and green dots. To see red and purple
+ones, set `k = 3` and pick building 159 (August block), 183 or 890.
+
+## Good to know
+
+- The brute force in the app (the teammate's `BruteForceList`) compares times using the CSV's
+  rounded `ts` column. With whole-hour windows, which is all the slider allows, it returns exactly
+  the same rows as the skip list. `09_test_ui.py` checks this on 150 random windows.
+- "Score every building" includes the buildings the threshold was tuned on, so it is a bit
+  optimistic. The held-out table is the one to report.
+- Timings depend on your machine and on what else is running.
+
+## How it is built
+
+- Streamlit **re-runs `09_app.py` from top to bottom on every click**. The slow steps (building
+  the skip list, reading the labels) are cached with `@st.cache_resource`, so they only happen
+  once.
+- `08_ui_helpers.py` holds the logic that can be tested without a browser: finding the data files,
+  splitting the data into blocks, preparing the chart data, and drawing the chart.
 
 ## Tests
 
 ```bash
-python -m pytest            # all three parts: 61 tests
-python -m pytest 09_test_ui.py
+python -m pytest 09_test_ui.py     # 12 tests, including a headless run of the whole app
 ```
