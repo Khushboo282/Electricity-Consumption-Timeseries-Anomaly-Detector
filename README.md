@@ -122,9 +122,9 @@ Then run the steps in the order of the file numbers:
 
 ```bash
 python -m pytest                   # run all 61 tests (about 30 s)
-python 04_benchmark.py             # skip list vs brute force timing
-python 07_run_anomaly_eval.py      # anomaly detection accuracy (about 1 min)
-streamlit run 09_app.py            # the interactive app (opens in your browser)
+python 05_benchmark.py             # skip list vs brute force timing
+python 08_run_anomaly_eval.py      # anomaly detection accuracy (about 1 min)
+streamlit run 10_app.py            # the interactive app (opens in your browser)
 ```
 
 ### Why the file names start with numbers
@@ -134,7 +134,7 @@ that starts with a digit, so the files load each other like this:
 
 ```python
 from importlib import import_module
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 ```
 
@@ -142,8 +142,8 @@ TimeSeriesStore = _timeseries_store.TimeSeriesStore
 
 ```python
 from importlib import import_module
-TimeSeriesStore = import_module("02_timeseries_store").TimeSeriesStore
-AnomalyDetector = import_module("05_anomaly").AnomalyDetector
+TimeSeriesStore = import_module("03_timeseries_store").TimeSeriesStore
+AnomalyDetector = import_module("06_anomaly").AnomalyDetector
 
 store = TimeSeriesStore.from_csv("data/store_data.csv", seed=42)
 
@@ -158,7 +158,7 @@ for a in detector.detect(159, "2016-08-01", "2016-08-05 23:00"):
 
 ## The app
 
-`streamlit run 09_app.py` opens four tabs:
+`streamlit run 10_app.py` opens four tabs:
 
 1. **Explore & detect**: a chart of the readings with flagged anomalies marked.
 2. **Skip list vs brute force**: the same query on both, timed side by side.
@@ -178,23 +178,24 @@ or 890. Details: [docs/README_ui.md](docs/README_ui.md).
 ├── data/                    store_data.csv, ground_truth.csv
 ├── docs/                    detailed guides (see below)
 │
-├── 01_skiplist.py           the skip list
-├── 02_timeseries_store.py   loads the CSV, builds keys, answers queries
-├── 03_brute_force.py        linear scan (for speed comparison and checking answers)
-├── 03_test_skiplist.py      TEST: skip list, store, brute force
-├── 04_benchmark.py          RUN:  skip list vs brute force timing
-├── 05_anomaly.py            the anomaly detector
-├── 06_evaluation.py         precision / recall / F1
-├── 06_test_anomaly.py       TEST: anomaly detector and metrics
-├── 07_run_anomaly_eval.py   RUN:  full accuracy evaluation
-├── 08_ui_helpers.py         helper functions for the app
-├── 09_app.py                RUN:  the Streamlit app
-├── 09_test_ui.py            TEST: the app and its helpers
+├── 01_preprocess.ipynb      PREP: cut the raw Kaggle file down to its first 700,000 rows
+├── 02_skiplist.py           the skip list
+├── 03_timeseries_store.py   loads the CSV, builds keys, answers queries
+├── 04_brute_force.py        linear scan (for speed comparison and checking answers)
+├── 04_test_skiplist.py      TEST: skip list, store, brute force
+├── 05_benchmark.py          RUN:  skip list vs brute force timing
+├── 06_anomaly.py            the anomaly detector
+├── 07_evaluation.py         precision / recall / F1
+├── 07_test_anomaly.py       TEST: anomaly detector and metrics
+├── 08_run_anomaly_eval.py   RUN:  full accuracy evaluation
+├── 09_ui_helpers.py         helper functions for the app
+├── 10_app.py                RUN:  the Streamlit app
+├── 10_test_ui.py            TEST: the app and its helpers
 │
-├── benchmark_results.csv    output of 04_benchmark.py
-├── benchmark_plot.png       output of 04_benchmark.py
-├── anomaly_results.csv      output of 07_run_anomaly_eval.py
-└── anomaly_tuning_sweep.csv output of 07_run_anomaly_eval.py
+├── benchmark_results.csv    output of 05_benchmark.py
+├── benchmark_plot.png       output of 05_benchmark.py
+├── anomaly_results.csv      output of 08_run_anomaly_eval.py
+└── anomaly_tuning_sweep.csv output of 08_run_anomaly_eval.py
 ```
 
 ## Documentation

@@ -1,5 +1,5 @@
 """
-02_timeseries_store.py -- Time-series store built on top of the skip list.
+03_timeseries_store.py -- Time-series store built on top of the skip list.
 
 This module is the "storage + query layer" of the project. It turns the raw
 CSV (building_id, timestamp, meter_reading) into skip-list entries and exposes
@@ -36,7 +36,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pandas as pd
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_skiplist = import_module("01_skiplist")
+_skiplist = import_module("02_skiplist")
 SkipList = _skiplist.SkipList
 
 _EPOCH = pd.Timestamp("1970-01-01")

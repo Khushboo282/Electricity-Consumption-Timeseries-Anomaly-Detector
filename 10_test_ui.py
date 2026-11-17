@@ -1,7 +1,7 @@
 """
-09_test_ui.py -- Tests for the UI layer.
+10_test_ui.py -- Tests for the UI layer.
 
-Run:  python -m pytest 09_test_ui.py -v
+Run:  python -m pytest 10_test_ui.py -v
 Needs the data files for the integration tests (env STORE_DATA_CSV /
 GROUND_TRUTH_CSV, or a ./data folder); those tests are skipped otherwise.
 
@@ -22,15 +22,15 @@ from datetime import datetime, timedelta
 import pytest
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_anomaly = import_module("05_anomaly")
+_anomaly = import_module("06_anomaly")
 AnomalyDetector = _anomaly.AnomalyDetector
 Baseline = _anomaly.Baseline
 compute_baseline = _anomaly.compute_baseline
 signed_z = _anomaly.signed_z
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 to_epoch = _timeseries_store.to_epoch
-_ui_helpers = import_module("08_ui_helpers")
+_ui_helpers = import_module("09_ui_helpers")
 band_frame = _ui_helpers.band_frame
 brute_keys = _ui_helpers.brute_keys
 brute_range = _ui_helpers.brute_range
@@ -219,7 +219,7 @@ def test_app_runs_headlessly_and_responds_to_controls():
     truth = _find("GROUND_TRUTH_CSV", "ground_truth.csv")
     if truth:
         os.environ["GROUND_TRUTH_CSV"] = truth
-    app_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "09_app.py")
+    app_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "10_app.py")
     at = AppTest.from_file(app_file, default_timeout=240).run()
     assert not at.exception
     metrics = {m.label: m.value for m in at.metric}

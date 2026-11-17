@@ -1,5 +1,5 @@
 """
-03_brute_force.py -- The linear-scan baseline (and our correctness oracle).
+04_brute_force.py -- The linear-scan baseline (and our correctness oracle).
 
 WHY THIS FILE EXISTS
 --------------------

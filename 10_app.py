@@ -1,7 +1,7 @@
 """
-09_app.py -- Streamlit UI for the Time-Series Store with Anomaly Detection.
+10_app.py -- Streamlit UI for the Time-Series Store with Anomaly Detection.
 
-Run:   streamlit run 09_app.py
+Run:   streamlit run 10_app.py
 (The data files are looked up in ./data next to this file; see the sidebar.)
 
 WHAT THE APP SHOWS
@@ -26,18 +26,18 @@ import pandas as pd
 import streamlit as st
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_anomaly = import_module("05_anomaly")
+_anomaly = import_module("06_anomaly")
 AnomalyDetector = _anomaly.AnomalyDetector
-_evaluation = import_module("06_evaluation")
+_evaluation = import_module("07_evaluation")
 anomaly_runs = _evaluation.anomaly_runs
 event_recall = _evaluation.event_recall
 load_ground_truth = _evaluation.load_ground_truth
 score = _evaluation.score
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 to_epoch = _timeseries_store.to_epoch
 epoch_to_datetime = _timeseries_store.epoch_to_datetime
-_ui_helpers = import_module("08_ui_helpers")
+_ui_helpers = import_module("09_ui_helpers")
 HERE = _ui_helpers.HERE
 brute_keys = _ui_helpers.brute_keys
 brute_range = _ui_helpers.brute_range
@@ -113,7 +113,7 @@ with st.sidebar:
 
 if not store_csv or not os.path.isfile(store_csv):
     st.error("Could not find **store_data.csv**. Put it in a `data` folder next to "
-             "`09_app.py`, set the STORE_DATA_CSV environment variable, or type its "
+             "`10_app.py`, set the STORE_DATA_CSV environment variable, or type its "
              "path in the sidebar (Data files).")
     st.stop()
 

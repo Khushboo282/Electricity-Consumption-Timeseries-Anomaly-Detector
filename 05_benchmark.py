@@ -1,8 +1,8 @@
 """
-04_benchmark.py -- Skip list vs linear scan.
+05_benchmark.py -- Skip list vs linear scan.
 
-Run:  python 04_benchmark.py                       (uses data/store_data.csv)
-      python 04_benchmark.py --csv "C:/path/to/store_data.csv"
+Run:  python 05_benchmark.py                       (uses data/store_data.csv)
+      python 05_benchmark.py --csv "C:/path/to/store_data.csv"
       (optional: --sizes 10000 50000 100000 262719 --queries 50 --repeats 3)
 
 WHAT IT MEASURES
@@ -37,9 +37,9 @@ import random
 import time
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_brute_force = import_module("03_brute_force")
+_brute_force = import_module("04_brute_force")
 brute_force_query_raw = _brute_force.brute_force_query_raw
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 load_rows = _timeseries_store.load_rows
 

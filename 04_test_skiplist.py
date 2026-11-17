@@ -1,5 +1,5 @@
 """
-03_test_skiplist.py -- How we know the skip list works.
+04_test_skiplist.py -- How we know the skip list works.
 
 Run:   python -m pytest -v
 Real-data tests need the CSV; point to it with the environment variable
@@ -21,11 +21,11 @@ from datetime import datetime
 import pytest
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_brute_force = import_module("03_brute_force")
+_brute_force = import_module("04_brute_force")
 brute_force_query_raw = _brute_force.brute_force_query_raw
-_skiplist = import_module("01_skiplist")
+_skiplist = import_module("02_skiplist")
 SkipList = _skiplist.SkipList
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 epoch_to_datetime = _timeseries_store.epoch_to_datetime
 load_rows = _timeseries_store.load_rows

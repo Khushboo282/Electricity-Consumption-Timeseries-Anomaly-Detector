@@ -8,7 +8,7 @@ check accuracy against the labels.
 
 ```bash
 pip install -r requirements.txt
-streamlit run 09_app.py
+streamlit run 10_app.py
 ```
 
 It opens in your browser. The first start takes a few seconds while the skip list is built.
@@ -38,7 +38,7 @@ turned off.
 2. **Skip list vs brute force**: runs the same query both ways and shows the time each took,
    how much work each did, and a check that both returned the same rows.
 3. **Accuracy**: correct flags, false alarms and misses for the current window. You can also
-   score all 192 buildings, and see the held-out results from `07_run_anomaly_eval.py`.
+   score all 192 buildings, and see the held-out results from `08_run_anomaly_eval.py`.
 4. **About**: a short explanation.
 
 ## Reading the chart
@@ -64,21 +64,21 @@ ones, set `k = 3` and pick building 159 (August block), 183 or 890.
 
 - The brute force in the app (the teammate's `BruteForceList`) compares times using the CSV's
   rounded `ts` column. With whole-hour windows, which is all the slider allows, it returns exactly
-  the same rows as the skip list. `09_test_ui.py` checks this on 150 random windows.
+  the same rows as the skip list. `10_test_ui.py` checks this on 150 random windows.
 - "Score every building" includes the buildings the threshold was tuned on, so it is a bit
   optimistic. The held-out table is the one to report.
 - Timings depend on your machine and on what else is running.
 
 ## How it is built
 
-- Streamlit **re-runs `09_app.py` from top to bottom on every click**. The slow steps (building
+- Streamlit **re-runs `10_app.py` from top to bottom on every click**. The slow steps (building
   the skip list, reading the labels) are cached with `@st.cache_resource`, so they only happen
   once.
-- `08_ui_helpers.py` holds the logic that can be tested without a browser: finding the data files,
+- `09_ui_helpers.py` holds the logic that can be tested without a browser: finding the data files,
   splitting the data into blocks, preparing the chart data, and drawing the chart.
 
 ## Tests
 
 ```bash
-python -m pytest 09_test_ui.py     # 12 tests, including a headless run of the whole app
+python -m pytest 10_test_ui.py     # 12 tests, including a headless run of the whole app
 ```

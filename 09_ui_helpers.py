@@ -1,5 +1,5 @@
 """
-08_ui_helpers.py -- Pure helper functions for the Streamlit app (09_app.py).
+09_ui_helpers.py -- Pure helper functions for the Streamlit app (10_app.py).
 
 They live in their own module so they can be unit-tested without a browser.
 
@@ -25,10 +25,10 @@ import altair as alt
 import pandas as pd
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_anomaly = import_module("05_anomaly")
+_anomaly = import_module("06_anomaly")
 Baseline = _anomaly.Baseline
 normal_stats = _anomaly.normal_stats
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 to_epoch = _timeseries_store.to_epoch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -200,7 +200,7 @@ def time_best_us(func: Callable[[], object], repeats: int, rounds: int = 3) -> f
 # ---------------------------------------------------------------------- #
 def load_brute_force(csv_path: str):
     """Build the in-project ``BruteForceList`` from the CSV."""
-    _brute_force = import_module("03_brute_force")
+    _brute_force = import_module("04_brute_force")
     BruteForceList = _brute_force.BruteForceList
 
     brute = BruteForceList()

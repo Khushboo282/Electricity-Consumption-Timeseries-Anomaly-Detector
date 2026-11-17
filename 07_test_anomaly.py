@@ -1,7 +1,7 @@
 """
-06_test_anomaly.py -- How we know the anomaly detector works.
+07_test_anomaly.py -- How we know the anomaly detector works.
 
-Run:  python -m pytest 06_test_anomaly.py -v
+Run:  python -m pytest 07_test_anomaly.py -v
 Real-data tests need the readings and labels (env vars STORE_DATA_CSV and
 GROUND_TRUTH_CSV, or files next to this script); otherwise they are skipped.
 
@@ -22,21 +22,21 @@ from datetime import datetime, timedelta
 import pytest
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_anomaly = import_module("05_anomaly")
+_anomaly = import_module("06_anomaly")
 AnomalyDetector = _anomaly.AnomalyDetector
 Baseline = _anomaly.Baseline
 compute_baseline = _anomaly.compute_baseline
 hour_of_day = _anomaly.hour_of_day
 mean_and_std = _anomaly.mean_and_std
 signed_z = _anomaly.signed_z
-_evaluation = import_module("06_evaluation")
+_evaluation = import_module("07_evaluation")
 anomaly_runs = _evaluation.anomaly_runs
 event_recall = _evaluation.event_recall
 load_ground_truth = _evaluation.load_ground_truth
 restrict = _evaluation.restrict
 score = _evaluation.score
 split_buildings = _evaluation.split_buildings
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 to_epoch = _timeseries_store.to_epoch
 

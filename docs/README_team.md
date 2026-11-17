@@ -34,7 +34,7 @@ We are graded on three things:
 | Graded on | Part |
 |---|---|
 | A correct index | C (skip list) |
-| Query speed compared with a simple scan | B (brute force) + C, measured by `04_benchmark.py` |
+| Query speed compared with a simple scan | B (brute force) + C, measured by `05_benchmark.py` |
 | Accuracy of the anomaly detection | D (anomaly detection) |
 
 Parts A (loading the data) and E (the app) make the rest work and let us show it off.
@@ -101,21 +101,21 @@ flowchart LR
 
 | File | Part | What it is |
 |---|---|---|
-| `01_skiplist.py` | C | the skip list |
-| `02_timeseries_store.py` | A + C | loading the CSV, making keys, answering queries |
-| `03_brute_force.py` | B | the linear scan |
-| `03_test_skiplist.py` | C | TEST: skip list, store, brute force |
-| `04_benchmark.py` | B + C | RUN: speed comparison |
-| `05_anomaly.py` | D | the anomaly detector |
-| `06_evaluation.py` | A + D | loading labels; precision / recall / F1 |
-| `06_test_anomaly.py` | D | TEST: detector and metrics |
-| `07_run_anomaly_eval.py` | D | RUN: full accuracy evaluation |
-| `08_ui_helpers.py` | E | helper functions for the app |
-| `09_app.py` | E | RUN: the app |
-| `09_test_ui.py` | E | TEST: the app |
+| `02_skiplist.py` | C | the skip list |
+| `03_timeseries_store.py` | A + C | loading the CSV, making keys, answering queries |
+| `04_brute_force.py` | B | the linear scan |
+| `04_test_skiplist.py` | C | TEST: skip list, store, brute force |
+| `05_benchmark.py` | B + C | RUN: speed comparison |
+| `06_anomaly.py` | D | the anomaly detector |
+| `07_evaluation.py` | A + D | loading labels; precision / recall / F1 |
+| `07_test_anomaly.py` | D | TEST: detector and metrics |
+| `08_run_anomaly_eval.py` | D | RUN: full accuracy evaluation |
+| `09_ui_helpers.py` | E | helper functions for the app |
+| `10_app.py` | E | RUN: the app |
+| `10_test_ui.py` | E | TEST: the app |
 
 The numbers show the build order. Python's `import` can't load names that start with a digit, so
-the files load each other with `import_module("02_timeseries_store")`. Keep all `.py` files in the
+the files load each other with `import_module("03_timeseries_store")`. Keep all `.py` files in the
 same folder.
 
 ### Run everything
@@ -123,9 +123,9 @@ same folder.
 ```bash
 pip install -r requirements.txt
 python -m pytest                   # all 61 tests (about 30 s)
-python 04_benchmark.py             # speed comparison
-python 07_run_anomaly_eval.py      # accuracy (about 1 min)
-streamlit run 09_app.py            # the app
+python 05_benchmark.py             # speed comparison
+python 08_run_anomaly_eval.py      # accuracy (about 1 min)
+streamlit run 10_app.py            # the app
 ```
 
 ---
@@ -136,7 +136,7 @@ streamlit run 09_app.py            # the app
 readings and labels line up exactly.
 
 **Your code:** `to_epoch`, `epoch_to_datetime`, `timestamps_to_epochs` and `load_rows` in
-`02_timeseries_store.py`; `load_ground_truth` in `06_evaluation.py`.
+`03_timeseries_store.py`; `load_ground_truth` in `07_evaluation.py`.
 
 ### What happens
 
@@ -160,7 +160,7 @@ readings and labels line up exactly.
 
 ```python
 from importlib import import_module
-store_module = import_module("02_timeseries_store")
+store_module = import_module("03_timeseries_store")
 rows = store_module.load_rows("data/store_data.csv")
 print(len(rows), rows[0])                          # 262719 (107, 1451606400, 175.184)
 print(store_module.to_epoch("2016-01-01 00:00"))   # 1451606400
@@ -182,7 +182,7 @@ ones. It has two jobs:
 2. **Answer checker:** it's so simple it's obviously right. If the skip list gives the same
    answers, the skip list is right too.
 
-**Your code:** `03_brute_force.py`.
+**Your code:** `04_brute_force.py`.
 
 ```python
 matches = [((b, e), v) for b, e, v in rows
@@ -199,7 +199,7 @@ The file has two versions of the scan:
 - `BruteForceList` works on the CSV's rounded `ts` column and is used by the app. With whole-hour
   windows (all the app allows) it gives exactly the same rows.
 
-**Fair comparison** (`04_benchmark.py`): same rows, same queries, same language, same result
+**Fair comparison** (`05_benchmark.py`): same rows, same queries, same language, same result
 format; each time is the best of several runs; every answer is checked before it is timed.
 
 ### Be ready to explain
@@ -214,8 +214,8 @@ format; each time is the best of several runs; every answer is checked before it
 **Goal:** a sorted structure, written from scratch, that finds the start of a range in about
 log(n) steps instead of n.
 
-**Your code:** `01_skiplist.py`, the `TimeSeriesStore` class in `02_timeseries_store.py`, and
-`03_test_skiplist.py`.
+**Your code:** `02_skiplist.py`, the `TimeSeriesStore` class in `03_timeseries_store.py`, and
+`04_test_skiplist.py`.
 
 ### The idea
 
@@ -274,7 +274,7 @@ work grows with the size of the answer, not with the size of the database.
 **Goal:** flag unusual readings with simple statistics, no machine learning, and measure how
 accurate that is. Full details and results: [README_anomaly.md](README_anomaly.md).
 
-**Your code:** `05_anomaly.py`, `06_evaluation.py`, `07_run_anomaly_eval.py`, `06_test_anomaly.py`.
+**Your code:** `06_anomaly.py`, `07_evaluation.py`, `08_run_anomaly_eval.py`, `07_test_anomaly.py`.
 
 ### The idea in three steps
 
@@ -331,11 +331,11 @@ splits.
 **Goal:** make everything visible: query a building, see the anomalies on a chart, compare skip
 list and brute force live, and see the accuracy. Full details: [README_ui.md](README_ui.md).
 
-**Your code:** `09_app.py` (the page), `08_ui_helpers.py` (logic that can be tested without a
-browser), `09_test_ui.py`.
+**Your code:** `10_app.py` (the page), `09_ui_helpers.py` (logic that can be tested without a
+browser), `10_test_ui.py`.
 
 ```bash
-streamlit run 09_app.py
+streamlit run 10_app.py
 ```
 
 **How it is built:**

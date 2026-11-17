@@ -1,5 +1,5 @@
 """
-05_anomaly.py -- Statistical anomaly detection on top of the skip-list store.
+06_anomaly.py -- Statistical anomaly detection on top of the skip-list store.
 
 NO MACHINE LEARNING. Everything here is descriptive statistics plus a
 hand-chosen threshold:
@@ -73,7 +73,7 @@ from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from importlib import import_module   # our file names start with a digit, so plain 'import' cannot load them
-_timeseries_store = import_module("02_timeseries_store")
+_timeseries_store = import_module("03_timeseries_store")
 TimeSeriesStore = _timeseries_store.TimeSeriesStore
 epoch_to_datetime = _timeseries_store.epoch_to_datetime
 to_epoch = _timeseries_store.to_epoch

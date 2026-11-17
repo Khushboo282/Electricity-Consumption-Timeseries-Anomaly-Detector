@@ -8,17 +8,17 @@ tree libraries).
 
 | File | What it does |
 |---|---|
-| `01_skiplist.py` | The skip list: `insert`, `get`, `search`, `range_query`, `check_invariants`. Works with any sortable keys. |
-| `02_timeseries_store.py` | Loads the CSV, turns each row into a key, and offers `query(building_id, start, end)`. |
-| `03_brute_force.py` | The linear scan: checks every row. Used to measure speed and to check the skip list's answers. |
-| `03_test_skiplist.py` | 24 tests. |
-| `04_benchmark.py` | Times skip list vs linear scan; writes `benchmark_results.csv` and `benchmark_plot.png`. |
+| `02_skiplist.py` | The skip list: `insert`, `get`, `search`, `range_query`, `check_invariants`. Works with any sortable keys. |
+| `03_timeseries_store.py` | Loads the CSV, turns each row into a key, and offers `query(building_id, start, end)`. |
+| `04_brute_force.py` | The linear scan: checks every row. Used to measure speed and to check the skip list's answers. |
+| `04_test_skiplist.py` | 24 tests. |
+| `05_benchmark.py` | Times skip list vs linear scan; writes `benchmark_results.csv` and `benchmark_plot.png`. |
 
 ## Quick start
 
 ```python
 from importlib import import_module   # file names start with a digit
-TimeSeriesStore = import_module("02_timeseries_store").TimeSeriesStore
+TimeSeriesStore = import_module("03_timeseries_store").TimeSeriesStore
 
 store = TimeSeriesStore.from_csv("data/store_data.csv", seed=42)   # about 2 s
 store.query(107, "2016-01-01 09:00", "2016-01-01 12:00")
@@ -110,8 +110,8 @@ readings.
    made search overshoot, stopped detecting duplicates). The tests failed each time.
 
 ```bash
-python -m pytest 03_test_skiplist.py -v
-python 04_benchmark.py
+python -m pytest 04_test_skiplist.py -v
+python 05_benchmark.py
 ```
 
 ## Benchmark results

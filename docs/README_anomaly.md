@@ -8,10 +8,10 @@ range query.
 
 | File | What it does |
 |---|---|
-| `05_anomaly.py` | The detector (`AnomalyDetector`) and the statistics behind it. |
-| `06_evaluation.py` | Loads the labels; computes precision, recall, F1; splits buildings into tune/test halves. |
-| `07_run_anomaly_eval.py` | Runs the full evaluation; writes `anomaly_results.csv` and `anomaly_tuning_sweep.csv`. |
-| `06_test_anomaly.py` | 25 tests. |
+| `06_anomaly.py` | The detector (`AnomalyDetector`) and the statistics behind it. |
+| `07_evaluation.py` | Loads the labels; computes precision, recall, F1; splits buildings into tune/test halves. |
+| `08_run_anomaly_eval.py` | Runs the full evaluation; writes `anomaly_results.csv` and `anomaly_tuning_sweep.csv`. |
+| `07_test_anomaly.py` | 25 tests. |
 
 ## How it works
 
@@ -72,8 +72,8 @@ labels, so always present them as dataset-specific rules.
 
 ```python
 from importlib import import_module   # file names start with a digit
-TimeSeriesStore = import_module("02_timeseries_store").TimeSeriesStore
-AnomalyDetector = import_module("05_anomaly").AnomalyDetector
+TimeSeriesStore = import_module("03_timeseries_store").TimeSeriesStore
+AnomalyDetector = import_module("06_anomaly").AnomalyDetector
 
 store = TimeSeriesStore.from_csv("data/store_data.csv", seed=42)
 
@@ -116,7 +116,7 @@ Precision = 7/10 = 0.70, recall = 7/20 = 0.35, F1 = 2 × 0.70 × 0.35 / (0.70 + 
    the faster code used during the evaluation.
 
 ```bash
-python 07_run_anomaly_eval.py      # about 1 minute
+python 08_run_anomaly_eval.py      # about 1 minute
 ```
 
 ## Results
@@ -201,7 +201,7 @@ high-recall mode as the practical choice.
 - **Deliberate bugs:** we broke the code on purpose four ways. The tests failed every time.
 
 ```bash
-python -m pytest 06_test_anomaly.py -v
+python -m pytest 07_test_anomaly.py -v
 ```
 
 ## Limitations

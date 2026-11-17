@@ -1,5 +1,5 @@
 """
-01_skiplist.py -- A Skip List implemented from scratch (no external libraries).
+02_skiplist.py -- A Skip List implemented from scratch (no external libraries).
 
 WHAT IS A SKIP LIST?
 --------------------
