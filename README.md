@@ -221,9 +221,13 @@ or 890. Details: [docs/README_ui.md](docs/README_ui.md).
 
 ## Team
 
-- `<Name>`: `<part>`
-- `<Name>`: `<part>`
-- `<Name>`: `<part>`
+- `Pratham`: `Data Pre Processing & Anomaly Detection`
+- `Khushboo`: `Brute Force`
+- `Akanksha`: `Brute Force`
+- `Rohan`: `Skipped List`
+- `Pujita`: `Skipped List`
+- `Rahul`: `Anomaly Detection`
+- `Hitesh`: `UI`
 
 ## Reference
 
