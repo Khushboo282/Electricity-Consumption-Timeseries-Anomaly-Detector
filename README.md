@@ -10,6 +10,8 @@ A small time-series database written from scratch in Python. It:
 
 Course project for DS603, Data Structure Algorithms in Python.
 
+**Live demo:** [electricity-consumption-timeseries-anomaly-detector-23ckezkmzm.streamlit.app](https://electricity-consumption-timeseries-anomaly-detector-23ckezkmzm.streamlit.app/)
+
 ## Highlights
 
 - **Skip list built from scratch**: insert, search and range query take about log(n) steps.
